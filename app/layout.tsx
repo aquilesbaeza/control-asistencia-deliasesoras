@@ -1,7 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
-import NavBar from "@/components/NavBar";
 import RegistrarServiceWorker from "@/components/RegistrarServiceWorker";
 
 const geistSans = Geist({
@@ -15,18 +14,18 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Control de Asistencia",
-  description: "Control de asistencia de deliasesoras",
+  title: "Control",
+  description: "Control de asistencia de deliasesoras - TRIXO Retail Services",
   manifest: "/manifest.json",
   appleWebApp: {
     capable: true,
     statusBarStyle: "default",
-    title: "Asistencia",
+    title: "Control",
   },
 };
 
 export const viewport: Viewport = {
-  themeColor: "#196B24",
+  themeColor: "#0F7A8A",
   width: "device-width",
   initialScale: 1,
   maximumScale: 1,
@@ -38,10 +37,9 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       lang="es"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col bg-neutral-50 text-neutral-900">
+      <body className="min-h-full flex flex-col bg-[#F2F8F9] text-[#14181A]">
         <RegistrarServiceWorker />
-        <NavBar />
-        <main className="flex-1 w-full max-w-3xl mx-auto p-4">{children}</main>
+        {children}
       </body>
     </html>
   );

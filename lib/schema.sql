@@ -31,6 +31,23 @@ create table if not exists dias_especiales (
   unique (asesora_id, fecha)
 );
 
+-- Dias feriados del mes que Nuria define de antemano. Un feriado se trabaja
+-- de forma opcional: quien no tenga marca ese dia NO cuenta como ausencia.
+create table if not exists feriados (
+  id uuid primary key default gen_random_uuid(),
+  fecha date not null unique,
+  descripcion text,
+  creado_en timestamptz not null default now()
+);
+
+-- Comentarios libres por semana (igual al formato en papel de Nuria: vacaciones,
+-- incapacidades, ausencias, renuncias, nuevo ingreso, feriados trabajados, etc.)
+create table if not exists notas_semanales (
+  fecha_inicio date primary key, -- lunes de esa semana
+  texto text not null default '',
+  actualizado_en timestamptz not null default now()
+);
+
 create table if not exists configuracion (
   id int primary key default 1,
   horas_efectivas numeric not null default 8,

@@ -47,6 +47,13 @@ export const ETIQUETA_ESTATUS: Record<number, string> = {
   5: "Vacaciones",
 };
 
+export type Feriado = {
+  id: string;
+  fecha: string;
+  descripcion: string | null;
+  creado_en: string;
+};
+
 export type Anomalia = {
   asesora_id: string;
   nombre: string;

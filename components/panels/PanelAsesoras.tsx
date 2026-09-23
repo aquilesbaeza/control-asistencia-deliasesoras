@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import type { Asesora } from "@/lib/tipos";
 
-export default function AsesorasPage() {
+export default function PanelAsesoras() {
   const [asesoras, setAsesoras] = useState<Asesora[]>([]);
   const [cargando, setCargando] = useState(true);
   const [nombreNuevo, setNombreNuevo] = useState("");
@@ -85,74 +85,73 @@ export default function AsesorasPage() {
 
   return (
     <div className="space-y-4">
-      <h1 className="text-xl font-semibold">Asesoras</h1>
-
-      <div className="rounded-lg border border-neutral-200 bg-white p-4 space-y-2">
-        <h2 className="font-medium text-sm text-neutral-700">Agregar nueva</h2>
+      <div className="rounded-xl border border-[#DDE7E8] bg-white p-3 space-y-2">
+        <h2 className="font-bold text-[12px] text-[#0B5F6C]">Agregar nueva</h2>
         <input
           value={nombreNuevo}
           onChange={(e) => setNombreNuevo(e.target.value)}
           placeholder="Nombre completo"
-          className="block w-full rounded border border-neutral-300 p-2 text-sm"
+          className="block w-full rounded-lg border border-[#DDE7E8] p-2 text-[12px]"
         />
         <input
           value={puntoNuevo}
           onChange={(e) => setPuntoNuevo(e.target.value)}
           placeholder="Punto de venta"
-          className="block w-full rounded border border-neutral-300 p-2 text-sm"
+          className="block w-full rounded-lg border border-[#DDE7E8] p-2 text-[12px]"
         />
-        {error && <p className="text-xs text-red-600">{error}</p>}
+        {error && <p className="text-xs text-[#B23A3A]">{error}</p>}
         <button
           onClick={agregar}
           disabled={guardando}
-          className="w-full rounded-md bg-[#196B24] text-white py-2 text-sm font-medium disabled:opacity-50"
+          className="w-full rounded-lg text-white py-2 text-[12px] font-bold disabled:opacity-50"
+          style={{ background: "linear-gradient(150deg, #0B5F6C, #1EA6B8)" }}
         >
           Agregar
         </button>
       </div>
 
       {cargando ? (
-        <p className="text-sm text-neutral-500">Cargando…</p>
+        <p className="text-sm text-[#6B6D6E]">Cargando…</p>
       ) : (
         <div className="space-y-2">
           {asesoras.map((a) => (
             <div
               key={a.id}
-              className={`rounded-lg border p-3 bg-white ${a.activo ? "border-neutral-200" : "border-neutral-200 opacity-50"}`}
+              className={`rounded-xl border p-3 bg-white ${a.activo ? "border-[#DDE7E8]" : "border-[#DDE7E8] opacity-60"}`}
             >
-              <div className="font-medium">{a.nombre}</div>
+              <div className="font-bold text-[12.5px]">{a.nombre}</div>
               {editandoId === a.id ? (
                 <div className="flex gap-2 mt-1">
                   <input
                     value={puntoEdicion}
                     onChange={(e) => setPuntoEdicion(e.target.value)}
-                    className="flex-1 rounded border border-neutral-300 p-1 text-sm"
+                    className="flex-1 rounded border border-[#DDE7E8] p-1 text-[11.5px]"
                   />
                   <button
                     onClick={() => guardarReubicacion(a.id)}
-                    className="text-sm bg-[#196B24] text-white px-3 rounded"
+                    className="text-[11px] bg-[#0B5F6C] text-white px-3 rounded font-semibold"
                   >
                     Guardar
                   </button>
                 </div>
               ) : (
-                <div className="text-sm text-neutral-600">{a.punto}</div>
+                <div className="text-[11.5px] text-[#6B6D6E]">{a.punto}</div>
               )}
 
-              <div className="flex gap-3 mt-2 text-xs">
+              <div className="flex gap-3 mt-2 text-[11px] font-semibold">
                 <button
                   onClick={() => {
                     setEditandoId(a.id);
                     setPuntoEdicion(a.punto);
                   }}
-                  className="text-blue-700 underline"
+                  className="text-[#0F7A8A]"
                 >
                   Reubicar de punto
                 </button>
-                <button onClick={() => alternarActivo(a)} className="text-amber-700 underline">
+                <button onClick={() => alternarActivo(a)} className="text-[#0B5F6C]">
                   {a.activo ? "Dar de baja" : "Reactivar"}
                 </button>
-                <button onClick={() => eliminar(a.id)} className="text-red-700 underline">
+                <button onClick={() => eliminar(a.id)} className="text-[#B23A3A]">
                   Eliminar
                 </button>
               </div>

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
-import { calcularAnomalias } from "@/lib/asistencia";
+import { calcularAnomalias, rangoMes } from "@/lib/asistencia";
 import type { Asesora, Marca } from "@/lib/tipos";
 
 export async function GET(req: NextRequest) {
@@ -8,10 +8,11 @@ export async function GET(req: NextRequest) {
   if (!mes) return NextResponse.json({ error: "Falta parametro mes=YYYY-MM" }, { status: 400 });
 
   const supabase = supabaseAdmin();
+  const { desde, hasta } = rangoMes(mes);
 
   const [{ data: asesoras, error: errAsesoras }, { data: marcas, error: errMarcas }] = await Promise.all([
     supabase.from("asesoras").select("*").eq("activo", true),
-    supabase.from("marcas").select("*").gte("fecha", `${mes}-01`).lte("fecha", `${mes}-31`),
+    supabase.from("marcas").select("*").gte("fecha", desde).lt("fecha", hasta),
   ]);
 
   if (errAsesoras || errMarcas) {

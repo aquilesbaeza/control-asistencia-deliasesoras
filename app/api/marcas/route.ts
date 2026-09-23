@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
-import { detectarAnomaliaInmediata } from "@/lib/asistencia";
+import { detectarAnomaliaInmediata, rangoMes } from "@/lib/asistencia";
 import type { Marca } from "@/lib/tipos";
 
 export async function GET(req: NextRequest) {
@@ -9,7 +9,8 @@ export async function GET(req: NextRequest) {
 
   let query = supabase.from("marcas").select("*").order("fecha").order("hora");
   if (mes) {
-    query = query.gte("fecha", `${mes}-01`).lte("fecha", `${mes}-31`);
+    const { desde, hasta } = rangoMes(mes);
+    query = query.gte("fecha", desde).lt("fecha", hasta);
   }
 
   const { data, error } = await query;
@@ -63,13 +64,15 @@ export async function POST(req: NextRequest) {
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
-  const { data: marcasDelDia } = await supabase
-    .from("marcas")
-    .select("*")
-    .eq("asesora_id", asesora_id)
-    .eq("fecha", fecha);
+  const [{ data: marcasDelDia }, { data: asesora }] = await Promise.all([
+    supabase.from("marcas").select("*").eq("asesora_id", asesora_id).eq("fecha", fecha),
+    supabase.from("asesoras").select("nombre").eq("id", asesora_id).single(),
+  ]);
 
-  const anomalia = detectarAnomaliaInmediata((marcasDelDia ?? []) as Marca[]);
+  const anomalia = detectarAnomaliaInmediata(
+    (marcasDelDia ?? []) as Marca[],
+    asesora?.nombre ?? "La asesora"
+  );
 
   return NextResponse.json({ marca, anomalia });
 }

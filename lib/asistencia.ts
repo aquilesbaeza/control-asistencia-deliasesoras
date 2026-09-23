@@ -1,5 +1,13 @@
 import type { Anomalia, Asesora, Marca } from "./tipos";
 
+/** Rango [desde, hasta) para filtrar por mes sin asumir que todos tienen 31 dias. */
+export function rangoMes(mes: string): { desde: string; hasta: string } {
+  const [anio, m] = mes.split("-").map(Number);
+  const siguiente = new Date(anio, m, 1); // dia 1 del mes siguiente
+  const hasta = siguiente.toISOString().slice(0, 10);
+  return { desde: `${mes}-01`, hasta };
+}
+
 export type ResumenDia = {
   fecha: string;
   entrada: Marca | null;
@@ -80,18 +88,44 @@ export function calcularAnomalias(asesora: Asesora, marcas: Marca[]): Anomalia[]
   return anomalias.sort((a, b) => a.fecha.localeCompare(b.fecha));
 }
 
-/** Comentario de una marca puntual recién guardada, para el pop-up inmediato. */
+/**
+ * Estatus automatico de un dia sin gestion manual (sin dia_especial):
+ * - "asistencia" si hay entrada y salida ese dia.
+ * - "ausencia" si no hay marcas, el dia ya paso, y NO es feriado.
+ * - null si es un dia futuro, o un feriado sin marcas (se trabaja opcional,
+ *   no cuenta como ausencia), o si el asesora esta activa desde despues de esa fecha.
+ */
+export function estatusAutomatico(
+  fecha: string,
+  tieneAsistenciaCompleta: boolean,
+  esFeriado: boolean,
+  hoyISO: string
+): "asistencia" | "ausencia" | null {
+  if (tieneAsistenciaCompleta) return "asistencia";
+  if (fecha > hoyISO) return null;
+  if (esFeriado) return null;
+  return "ausencia";
+}
+
+/** Comentario de una marca puntual recién guardada, para el pop-up inmediato dirigido a Nuria. */
 export function detectarAnomaliaInmediata(
-  marcasDelDia: Marca[]
+  marcasDelDia: Marca[],
+  nombreAsesora: string
 ): { tipo: "falta_entrada" | "falta_salida"; mensaje: string } | null {
   const tieneEntrada = marcasDelDia.some((m) => m.tipo === "entrada");
   const tieneSalida = marcasDelDia.some((m) => m.tipo === "salida");
 
   if (tieneEntrada && !tieneSalida) {
-    return { tipo: "falta_salida", mensaje: "Aun no se ha registrado la marca de SALIDA de hoy." };
+    return {
+      tipo: "falta_salida",
+      mensaje: `${nombreAsesora} registró su entrada pero aún no tiene marca de salida hoy. ¿Le recordamos que la registre?`,
+    };
   }
   if (tieneSalida && !tieneEntrada) {
-    return { tipo: "falta_entrada", mensaje: "Aun no se ha registrado la marca de ENTRADA de hoy." };
+    return {
+      tipo: "falta_entrada",
+      mensaje: `${nombreAsesora} registró su salida pero no tiene marca de entrada hoy. ¿Falta esa foto por cargar?`,
+    };
   }
   return null;
 }
