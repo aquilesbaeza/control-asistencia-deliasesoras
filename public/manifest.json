@@ -1,0 +1,14 @@
+{
+  "name": "Control de Asistencia - Deliasesoras",
+  "short_name": "Asistencia",
+  "description": "Captura de marcas de asistencia y reportes para supervision de deliasesoras",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f5f5f5",
+  "theme_color": "#196B24",
+  "orientation": "portrait",
+  "icons": [
+    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png" }
+  ]
+}
