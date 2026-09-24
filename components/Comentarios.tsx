@@ -2,15 +2,15 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { ASUNTOS_COMENTARIO, type Asesora, type Comentario } from "@/lib/tipos";
-import { ahoraCR } from "@/lib/tiempo";
+import { ahoraCR, aSetiembre } from "@/lib/tiempo";
 import { mensajeAmable } from "@/lib/mensajes";
 
 function tituloDia(iso: string): string {
-  const texto = new Date(`${iso}T12:00:00`).toLocaleDateString("es-CR", {
+  const texto = aSetiembre(new Date(`${iso}T12:00:00`).toLocaleDateString("es-CR", {
     weekday: "long",
     day: "numeric",
     month: "long",
-  });
+  }));
   return texto.charAt(0).toUpperCase() + texto.slice(1);
 }
 

@@ -1,36 +1,31 @@
 "use client";
 
 import { useState } from "react";
-import TabBar, { type TabId } from "@/components/TabBar";
-import PanelHoy from "@/components/panels/PanelHoy";
+import Encabezado from "@/components/Encabezado";
+import PanelPrincipal from "@/components/panels/PanelPrincipal";
 import PanelCapturar from "@/components/panels/PanelCapturar";
-import PanelCalendario from "@/components/panels/PanelCalendario";
-import PanelAsesoras from "@/components/panels/PanelAsesoras";
 
 export default function Home() {
-  const [tab, setTab] = useState<TabId>("hoy");
-  const [fechaSalto, setFechaSalto] = useState<string | null>(null);
-
-  function cambiarTab(nueva: TabId) {
-    if (nueva === "hoy") setFechaSalto(null); // al tocar "Hoy" se vuelve al dia actual
-    setTab(nueva);
-  }
+  // Al guardar marcas capturadas, el panel de asistencia de arriba se refresca solo.
+  const [version, setVersion] = useState(0);
 
   return (
     <div className="flex flex-col min-h-full">
-      <TabBar activa={tab} onCambiar={cambiarTab} />
-      <main className="flex-1 w-full max-w-3xl mx-auto p-3">
-        {tab === "hoy" && <PanelHoy key={fechaSalto ?? "actual"} fechaInicial={fechaSalto ?? undefined} />}
-        {tab === "capturar" && <PanelCapturar />}
-        {tab === "calendario" && (
-          <PanelCalendario
-            onVerDia={(fecha) => {
-              setFechaSalto(fecha);
-              setTab("hoy");
-            }}
-          />
-        )}
-        {tab === "asesoras" && <PanelAsesoras />}
+      <Encabezado />
+      <main className="flex-1 w-full max-w-3xl mx-auto p-3 space-y-6">
+        <section id="asistencia" className="scroll-mt-28">
+          <PanelPrincipal recargar={version} />
+        </section>
+
+        <section id="capturar" className="scroll-mt-28 space-y-3">
+          <div className="rounded-xl px-3.5 py-3 text-white" style={{ background: "linear-gradient(150deg, #0B5F6C, #1EA6B8)" }}>
+            <h2 className="font-extrabold text-[15px]">Capturar marcas</h2>
+            <p className="text-[11.5px] text-teal-50/90 leading-snug">
+              Sube las fotos del WhatsApp: se leen en lote y lo que guardes se refleja arriba.
+            </p>
+          </div>
+          <PanelCapturar onGuardado={() => setVersion((v) => v + 1)} />
+        </section>
       </main>
     </div>
   );

@@ -47,7 +47,7 @@ async function hashArchivo(file: File): Promise<string> {
   }
 }
 
-export default function PanelCapturar() {
+export default function PanelCapturar({ onGuardado }: { onGuardado?: () => void }) {
   const [cola, setCola] = useState<ItemCaptura[]>([]);
   const [catalogo, setCatalogo] = useState<Asesora[]>([]);
   const [procesando, setProcesando] = useState(false);
@@ -261,6 +261,7 @@ export default function PanelCapturar() {
       setColaAnomalias((data.anomalias ?? []).map((a: { mensaje: string }) => a.mensaje));
       setCola([]);
       setSoloRevisar(false);
+      onGuardado?.();
     } catch (err) {
       setError(err instanceof Error ? err.message : "No se pudo guardar el lote. Intenta de nuevo, por favor.");
     } finally {
@@ -318,6 +319,7 @@ export default function PanelCapturar() {
       if (data.anomalia) setColaAnomalias((prev) => [...prev, data.anomalia.mensaje]);
       setManualAbierto(false);
       setManualAsesora("");
+      onGuardado?.();
     } catch (err) {
       setError(err instanceof Error ? err.message : "No se pudo guardar la marca");
     } finally {

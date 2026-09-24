@@ -66,18 +66,24 @@ export default function FormPermisos({
   colapsable = false,
   abiertoInicial,
   asesoraInicial,
+  tipoInicial,
+  ocultarTipo = false,
+  sinTitulo = false,
   onCambio,
 }: {
   colapsable?: boolean;
   abiertoInicial?: boolean;
   asesoraInicial?: string; // asesora ya elegida (cuando se abre desde su tarjeta)
+  tipoInicial?: TipoPermiso;
+  ocultarTipo?: boolean; // el tipo ya viene elegido desde afuera
+  sinTitulo?: boolean;
   onCambio?: () => void;
 }) {
   const [abierto, setAbierto] = useState(abiertoInicial ?? !colapsable);
   const [asesoras, setAsesoras] = useState<Asesora[]>([]);
   const [dias, setDias] = useState<DiaEspecial[]>([]);
   const [asesoraId, setAsesoraId] = useState(asesoraInicial ?? "");
-  const [tipo, setTipo] = useState<TipoPermiso>("vacaciones");
+  const [tipo, setTipo] = useState<TipoPermiso>(tipoInicial ?? "vacaciones");
   const hoy = ahoraCR().fecha;
   const [desde, setDesde] = useState(hoy);
   const [hasta, setHasta] = useState(hoy);
@@ -154,21 +160,25 @@ export default function FormPermisos({
 
   return (
     <div className="rounded-xl border border-[#DDE7E8] bg-white p-3">
-      <button
-        type="button"
-        onClick={() => colapsable && setAbierto((v) => !v)}
-        className="w-full flex items-center justify-between text-left"
-      >
-        <span className="text-[12.5px] font-bold text-[#0B5F6C]">Libres, vacaciones e incapacidades</span>
-        {colapsable && <span className="text-[#0F7A8A] text-sm font-bold">{abierto ? "−" : "+"}</span>}
-      </button>
+      {!sinTitulo && (
+        <button
+          type="button"
+          onClick={() => colapsable && setAbierto((v) => !v)}
+          className="w-full flex items-center justify-between text-left"
+        >
+          <span className="text-[12.5px] font-bold text-[#0B5F6C]">Libres, vacaciones e incapacidades</span>
+          {colapsable && <span className="text-[#0F7A8A] text-sm font-bold">{abierto ? "−" : "+"}</span>}
+        </button>
+      )}
 
       {abierto && (
         <div className="mt-2 space-y-2.5">
-          <p className="text-[11px] text-[#6B6D6E] leading-snug">
-            Nuria: regístralos aquí, incluso con anticipación. Lo que anotes tiene prioridad: el sistema no lo
-            marcará como ausencia ni como falta de marca.
-          </p>
+          {!sinTitulo && (
+            <p className="text-[11px] text-[#6B6D6E] leading-snug">
+              Nuria: regístralos aquí, incluso con anticipación. Lo que anotes tiene prioridad: el sistema no lo
+              marcará como ausencia ni como falta de marca.
+            </p>
+          )}
 
           <select
             value={asesoraId}
@@ -183,20 +193,22 @@ export default function FormPermisos({
             ))}
           </select>
 
-          <div className="flex gap-1.5">
-            {TIPOS.map((t) => (
-              <button
-                key={t.id}
-                type="button"
-                onClick={() => setTipo(t.id)}
-                className={`flex-1 rounded-lg py-2.5 text-[12.5px] font-semibold ${
-                  tipo === t.id ? "bg-[#0B5F6C] text-white" : "bg-[#E4F7F9] text-[#0B5F6C]"
-                }`}
-              >
-                {t.etiqueta}
-              </button>
-            ))}
-          </div>
+          {!ocultarTipo && (
+            <div className="flex gap-1.5">
+              {TIPOS.map((t) => (
+                <button
+                  key={t.id}
+                  type="button"
+                  onClick={() => setTipo(t.id)}
+                  className={`flex-1 rounded-lg py-2.5 text-[12.5px] font-semibold ${
+                    tipo === t.id ? "bg-[#0B5F6C] text-white" : "bg-[#E4F7F9] text-[#0B5F6C]"
+                  }`}
+                >
+                  {t.etiqueta}
+                </button>
+              ))}
+            </div>
+          )}
 
           <div className="grid grid-cols-2 gap-2">
             <label className="text-[10.5px] font-bold text-[#6B6D6E] uppercase tracking-wide">

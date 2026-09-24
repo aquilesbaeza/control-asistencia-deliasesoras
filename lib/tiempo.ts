@@ -18,6 +18,11 @@ export function ahoraCR(ahora: Date = new Date()): { fecha: string; minutos: num
   };
 }
 
+/** En Costa Rica se dice "setiembre" (asi se llama la hoja del Excel); el idioma del sistema dice "septiembre". */
+export function aSetiembre(texto: string): string {
+  return texto.replace(/septiembre/g, "setiembre").replace(/Septiembre/g, "Setiembre");
+}
+
 export function horaAMinutos(hora: string): number {
   const [h, m] = hora.split(":").map(Number);
   return h * 60 + m;
