@@ -380,7 +380,7 @@ export default function PanelCalendario({ onVerDia }: { onVerDia?: (fecha: strin
           <div className="rounded-xl border-2 border-[#35DCEC] bg-white p-3 space-y-2">
             <div className="text-[12.5px] font-bold text-[#0B5F6C]">Por revisar del mes · {porRevisar.length}</div>
             <p className="text-[11px] text-[#6B6D6E] leading-snug">
-              Marcas incompletas (falta entrada o salida) y jornadas con menos de 8 horas. Toca "Ver el día" para revisarlas o corregir las horas, Nuria.
+              Marcas incompletas (falta entrada o salida) y jornadas con menos de 8 horas. Toca &quot;Ver el día&quot; para revisarlas o corregir las horas, Nuria.
             </p>
             <div className="flex gap-1.5 flex-wrap">
               {(
