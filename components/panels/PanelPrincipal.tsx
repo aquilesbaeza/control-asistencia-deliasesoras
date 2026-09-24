@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import FormPermisos from "@/components/FormPermisos";
 import PreguntaFeriados from "@/components/PreguntaFeriados";
 import Comentarios from "@/components/Comentarios";
@@ -34,15 +34,12 @@ const LEYENDA: EstatusDia[] = ["asistencia", "ausencia", "libre", "vacaciones", 
 const MANUALES: EstatusDia[] = ["libre", "vacaciones", "incapacidad", "ausencia"];
 
 type Periodo = "dia" | "semana" | "mes";
-type Kpi = "ausencia" | "vacaciones" | "libre" | "incapacidad" | "faltaMarca" | "jornadaIncompleta";
+type Kpi = "ausencia" | "faltaMarca" | "jornadaIncompleta";
 type Tono = "ok" | "warn" | "info";
 
 const KPIS: { id: Kpi; etiqueta: string; fondo: string; texto: string; borde?: string }[] = [
   { id: "ausencia", etiqueta: "Ausencia", fondo: ESTILO.ausencia.fondo, texto: ESTILO.ausencia.texto },
-  { id: "vacaciones", etiqueta: "Vacaciones", fondo: ESTILO.vacaciones.fondo, texto: ESTILO.vacaciones.texto },
-  { id: "libre", etiqueta: "Libre", fondo: ESTILO.libre.fondo, texto: ESTILO.libre.texto },
-  { id: "incapacidad", etiqueta: "Incapacidad", fondo: ESTILO.incapacidad.fondo, texto: ESTILO.incapacidad.texto },
-  { id: "faltaMarca", etiqueta: "Falta marca (entrada o salida)", fondo: "#35DCEC", texto: "#0B3A41" },
+  { id: "faltaMarca", etiqueta: "Falta marca", fondo: "#35DCEC", texto: "#0B3A41" },
   { id: "jornadaIncompleta", etiqueta: "Jornada incompleta", fondo: "#FFFFFF", texto: "#0B3A41", borde: "#35DCEC" },
 ];
 
@@ -92,10 +89,7 @@ function rangoDePeriodo(periodo: Periodo, ref: string, mes: string, totalDias: n
 function cumple(kpi: Kpi, d: DiaCalculado, hoy: string): boolean {
   switch (kpi) {
     case "ausencia":
-    case "vacaciones":
-    case "libre":
-    case "incapacidad":
-      return d.estatus === kpi;
+      return d.estatus === "ausencia";
     case "faltaMarca":
       // Falta una de las dos marcas; hoy, ademas, quien aun no marca su entrada (unico aviso durante el dia).
       return d.estatus === "parcial" || (d.estatus === "pendiente" && d.fecha === hoy && !d.entrada && !d.salida && !d.manual);
@@ -222,7 +216,7 @@ function DetalleDia({
   );
 }
 
-export default function PanelPrincipal({ recargar = 0 }: { recargar?: number }) {
+export default function PanelPrincipal({ recargar = 0, arriba }: { recargar?: number; arriba?: ReactNode }) {
   const [referencia, setReferencia] = useState(() => ahoraCR().fecha);
   const [periodo, setPeriodo] = useState<Periodo>("dia");
   const [kpiActivo, setKpiActivo] = useState<Kpi | null>(null);
@@ -321,7 +315,7 @@ export default function PanelPrincipal({ recargar = 0 }: { recargar?: number }) 
   const coincidencias = useMemo(() => {
     const porAsesora = new Map<string, Record<Kpi, DiaCalculado[]>>();
     const vacio = (): Record<Kpi, DiaCalculado[]> => ({
-      ausencia: [], vacaciones: [], libre: [], incapacidad: [], faltaMarca: [], jornadaIncompleta: [],
+      ausencia: [], faltaMarca: [], jornadaIncompleta: [],
     });
     for (const f of filas) {
       const r = vacio();
@@ -487,6 +481,7 @@ export default function PanelPrincipal({ recargar = 0 }: { recargar?: number }) 
       : aSetiembre(new Date(`${mes}-01T12:00:00`).toLocaleDateString("es-CR", { month: "long", year: "numeric" }));
 
   const esHoyElPeriodo = hoy >= rango.desde && hoy <= rango.hasta;
+  const mesTexto = aSetiembre(new Date(`${mes}-01T12:00:00`).toLocaleDateString("es-CR", { month: "long", year: "numeric" }));
 
   return (
     <div className="space-y-3">
@@ -497,6 +492,28 @@ export default function PanelPrincipal({ recargar = 0 }: { recargar?: number }) 
       </datalist>
 
       <div ref={inicioRef} className="scroll-mt-20" />
+
+      {/* Excel del mes */}
+      <div className="rounded-xl border border-[#DDE7E8] bg-white p-3 space-y-2">
+        <div className="text-[12.5px] font-bold text-[#0B5F6C]">Excel de {mesTexto}</div>
+        <div className="grid grid-cols-2 gap-2">
+          <a
+            href={`/api/export/calendario?mes=${mes}`}
+            className="text-center text-[12.5px] font-bold rounded-xl border-2 border-[#1EA6B8] text-[#0B5F6C] py-3"
+          >
+            ⬇ Asistencia
+          </a>
+          <a
+            href={`/api/export/bitacora?mes=${mes}`}
+            className="text-center text-[12.5px] font-bold rounded-xl border-2 border-[#1EA6B8] text-[#0B5F6C] py-3"
+          >
+            ⬇ Marcas (bitácora)
+          </a>
+        </div>
+      </div>
+
+      {/* Carga del lote de fotos */}
+      {arriba}
 
       <PreguntaFeriados key={`feriados-${mes}`} mes={mes} onCambio={() => void cargar()} />
 
@@ -573,7 +590,7 @@ export default function PanelPrincipal({ recargar = 0 }: { recargar?: number }) 
       ) : (
         <>
           {/* Indicadores: tocar uno resalta a las asesoras que cumplen la condicion */}
-          <div className="grid grid-cols-2 gap-2">
+          <div className="grid grid-cols-3 gap-2">
             {KPIS.map((k) => {
               const activo = kpiActivo === k.id;
               const { personas, dias } = totales[k.id];
@@ -581,7 +598,7 @@ export default function PanelPrincipal({ recargar = 0 }: { recargar?: number }) 
                 <button
                   key={k.id}
                   onClick={() => setKpiActivo(activo ? null : k.id)}
-                  className="rounded-xl p-3 text-left"
+                  className="rounded-xl p-2.5 text-left"
                   style={{
                     background: k.fondo,
                     color: k.texto,
@@ -923,20 +940,6 @@ export default function PanelPrincipal({ recargar = 0 }: { recargar?: number }) 
         refresco={refresco}
       />
 
-      <div className="space-y-2">
-        <a
-          href={`/api/export/bitacora?mes=${mes}`}
-          className="block text-center text-[12.5px] font-bold rounded-xl border-2 border-[#1EA6B8] text-[#0B5F6C] py-3"
-        >
-          ⬇ Descargar Excel de Marcas (bitácora)
-        </a>
-        <a
-          href={`/api/export/calendario?mes=${mes}`}
-          className="block text-center text-[12.5px] font-bold rounded-xl border-2 border-[#1EA6B8] text-[#0B5F6C] py-3"
-        >
-          ⬇ Descargar Excel de Asistencia
-        </a>
-      </div>
     </div>
   );
 }

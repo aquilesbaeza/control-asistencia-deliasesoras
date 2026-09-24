@@ -1,7 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
-import type { Asesora, DiaEspecial } from "@/lib/tipos";
+import { useEffect, useState } from "react";
+import type { Asesora } from "@/lib/tipos";
 import { ahoraCR } from "@/lib/tiempo";
 
 type TipoPermiso = "libre" | "vacaciones" | "incapacidad";
@@ -12,24 +12,6 @@ const TIPOS: { id: TipoPermiso; etiqueta: string }[] = [
   { id: "incapacidad", etiqueta: "Incapacidad" },
 ];
 
-type Rango = {
-  asesora_id: string;
-  tipo: TipoPermiso;
-  nota: string | null;
-  desde: string;
-  hasta: string;
-};
-
-function diaSiguiente(iso: string): string {
-  const [a, m, d] = iso.split("-").map(Number);
-  return new Date(Date.UTC(a, m - 1, d + 1)).toISOString().slice(0, 10);
-}
-
-function restarDias(iso: string, dias: number): string {
-  const [a, m, d] = iso.split("-").map(Number);
-  return new Date(Date.UTC(a, m - 1, d - dias)).toISOString().slice(0, 10);
-}
-
 function diasEntre(desde: string, hasta: string): number {
   return Math.round((Date.parse(hasta) - Date.parse(desde)) / 86400000) + 1;
 }
@@ -38,30 +20,7 @@ function formatoCorto(iso: string): string {
   return new Date(`${iso}T00:00:00`).toLocaleDateString("es-CR", { day: "numeric", month: "short" });
 }
 
-// Junta dias consecutivos de la misma asesora/tipo/nota en un solo rango.
-function agruparRangos(dias: DiaEspecial[]): Rango[] {
-  const ordenados = [...dias]
-    .filter((d) => d.tipo !== "ausencia")
-    .sort((a, b) => a.asesora_id.localeCompare(b.asesora_id) || a.tipo.localeCompare(b.tipo) || a.fecha.localeCompare(b.fecha));
-
-  const rangos: Rango[] = [];
-  for (const d of ordenados) {
-    const ultimo = rangos[rangos.length - 1];
-    if (
-      ultimo &&
-      ultimo.asesora_id === d.asesora_id &&
-      ultimo.tipo === d.tipo &&
-      ultimo.nota === d.nota &&
-      diaSiguiente(ultimo.hasta) === d.fecha
-    ) {
-      ultimo.hasta = d.fecha;
-    } else {
-      rangos.push({ asesora_id: d.asesora_id, tipo: d.tipo as TipoPermiso, nota: d.nota, desde: d.fecha, hasta: d.fecha });
-    }
-  }
-  return rangos.sort((a, b) => a.desde.localeCompare(b.desde));
-}
-
+/** Registro manual de libres, vacaciones e incapacidades (con inicio y fin). */
 export default function FormPermisos({
   colapsable = false,
   abiertoInicial,
@@ -81,7 +40,6 @@ export default function FormPermisos({
 }) {
   const [abierto, setAbierto] = useState(abiertoInicial ?? !colapsable);
   const [asesoras, setAsesoras] = useState<Asesora[]>([]);
-  const [dias, setDias] = useState<DiaEspecial[]>([]);
   const [asesoraId, setAsesoraId] = useState(asesoraInicial ?? "");
   const [tipo, setTipo] = useState<TipoPermiso>(tipoInicial ?? "vacaciones");
   const hoy = ahoraCR().fecha;
@@ -92,28 +50,17 @@ export default function FormPermisos({
   const [error, setError] = useState<string | null>(null);
   const [okMsg, setOkMsg] = useState<string | null>(null);
 
-  const cargar = useCallback(async () => {
-    const [rA, rD] = await Promise.all([
-      fetch("/api/asesoras").then((r) => r.json()),
-      fetch(`/api/dias-especiales?desde=${restarDias(ahoraCR().fecha, 35)}`).then((r) => r.json()),
-    ]);
-    setAsesoras((rA.asesoras ?? []).filter((a: Asesora) => a.activo));
-    setDias(rD.dias ?? []);
-  }, []);
-
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    void cargar();
-  }, [cargar]);
-
-  const nombrePorId = useMemo(() => new Map(asesoras.map((a) => [a.id, a])), [asesoras]);
-  const rangos = useMemo(() => agruparRangos(dias), [dias]);
+    fetch("/api/asesoras")
+      .then((r) => r.json())
+      .then((d) => setAsesoras((d.asesoras ?? []).filter((a: Asesora) => a.activo)));
+  }, []);
 
   async function guardar() {
     setError(null);
     setOkMsg(null);
     if (!asesoraId) {
-      setError("Elige la asesora.");
+      setError("Elige la asesora, por favor.");
       return;
     }
     setGuardando(true);
@@ -125,7 +72,7 @@ export default function FormPermisos({
       });
       const data = await resp.json();
       if (!resp.ok) throw new Error(data.error);
-      setOkMsg(`Guardado: ${data.dias?.length ?? 0} día(s).`);
+      setOkMsg(`Listo, guardado: ${data.dias?.length ?? 0} día(s).`);
 
       // Deja el registro en Comentarios con estructura: asunto + asesora + situacion.
       const rangoTexto = desde === hasta ? formatoCorto(desde) : `del ${formatoCorto(desde)} al ${formatoCorto(hasta)}`;
@@ -141,21 +88,12 @@ export default function FormPermisos({
       }).catch(() => {});
 
       setNota("");
-      await cargar();
       onCambio?.();
     } catch (err) {
       setError(err instanceof Error ? err.message : "No se pudo guardar");
     } finally {
       setGuardando(false);
     }
-  }
-
-  async function quitar(r: Rango) {
-    await fetch(`/api/dias-especiales?asesora_id=${r.asesora_id}&desde=${r.desde}&hasta=${r.hasta}`, {
-      method: "DELETE",
-    });
-    await cargar();
-    onCambio?.();
   }
 
   return (
@@ -172,7 +110,7 @@ export default function FormPermisos({
       )}
 
       {abierto && (
-        <div className="mt-2 space-y-2.5">
+        <div className={`${sinTitulo ? "" : "mt-2 "}space-y-2.5`}>
           {!sinTitulo && (
             <p className="text-[11px] text-[#6B6D6E] leading-snug">
               Nuria: regístralos aquí, incluso con anticipación. Lo que anotes tiene prioridad: el sistema no lo
@@ -259,33 +197,6 @@ export default function FormPermisos({
           >
             {guardando ? "Guardando…" : "Guardar"}
           </button>
-
-          {rangos.length > 0 && (
-            <div className="pt-2 border-t border-[#DDE7E8] space-y-1.5">
-              <div className="text-[10.5px] font-bold text-[#6B6D6E] uppercase tracking-wide">
-                Registrados (último mes y próximos)
-              </div>
-              {rangos.map((r) => (
-                <div
-                  key={`${r.asesora_id}-${r.tipo}-${r.desde}`}
-                  className="flex items-center gap-2 bg-[#F2F8F9] rounded-lg px-2.5 py-2 text-[12px]"
-                >
-                  <div className="flex-1 min-w-0">
-                    <div className="font-semibold truncate">{nombrePorId.get(r.asesora_id)?.nombre ?? "—"}</div>
-                    <div className="text-[11px] text-[#6B6D6E]">
-                      {TIPOS.find((t) => t.id === r.tipo)?.etiqueta} ·{" "}
-                      {r.desde === r.hasta ? formatoCorto(r.desde) : `${formatoCorto(r.desde)} – ${formatoCorto(r.hasta)}`}
-                      {` (${diasEntre(r.desde, r.hasta)} ${diasEntre(r.desde, r.hasta) === 1 ? "día" : "días"})`}
-                      {r.nota ? ` · ${r.nota}` : ""}
-                    </div>
-                  </div>
-                  <button type="button" onClick={() => quitar(r)} className="text-[#B23A3A] text-[11px] font-semibold px-1">
-                    Quitar
-                  </button>
-                </div>
-              ))}
-            </div>
-          )}
         </div>
       )}
     </div>

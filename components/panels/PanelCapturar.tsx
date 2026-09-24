@@ -478,14 +478,16 @@ export default function PanelCapturar({ onGuardado }: { onGuardado?: () => void 
         </div>
       )}
 
-      <button
-        onClick={confirmarLote}
-        disabled={guardando || procesando || aGuardar.length === 0}
-        className="w-full rounded-xl py-3 font-bold text-white text-sm disabled:opacity-50"
-        style={{ background: "linear-gradient(150deg, #0B5F6C, #1EA6B8)" }}
-      >
-        {guardando ? "Guardando…" : `Guardar ${aGuardar.length || ""} marca(s)`.replace("  ", " ")}
-      </button>
+      {cola.length > 0 && (
+        <button
+          onClick={confirmarLote}
+          disabled={guardando || procesando || aGuardar.length === 0}
+          className="w-full rounded-xl py-3 font-bold text-white text-sm disabled:opacity-50"
+          style={{ background: "linear-gradient(150deg, #0B5F6C, #1EA6B8)" }}
+        >
+          {guardando ? "Guardando…" : `Guardar ${aGuardar.length || ""} marca(s)`.replace("  ", " ")}
+        </button>
+      )}
 
       <div className="pt-2 border-t border-[#DDE7E8]">
         <button
