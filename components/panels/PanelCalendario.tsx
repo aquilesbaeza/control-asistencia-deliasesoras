@@ -162,7 +162,7 @@ function DetalleDia({
   );
 }
 
-export default function PanelCalendario() {
+export default function PanelCalendario({ onVerDia }: { onVerDia?: (fecha: string) => void }) {
   const [mes, setMes] = useState(mesActual());
   const [asesoras, setAsesoras] = useState<Asesora[]>([]);
   const [marcas, setMarcas] = useState<Marca[]>([]);
@@ -175,6 +175,8 @@ export default function PanelCalendario() {
   const [abierta, setAbierta] = useState<string | null>(null);
   const [seleccion, setSeleccion] = useState<Seleccion>(null);
   const [refresco, setRefresco] = useState(0);
+  const [filtroRevisar, setFiltroRevisar] = useState<"todo" | "marca" | "corta">("todo");
+  const [verTodoRevisar, setVerTodoRevisar] = useState(false);
   const [nuevoFeriadoFecha, setNuevoFeriadoFecha] = useState("");
   const [nuevoFeriadoDesc, setNuevoFeriadoDesc] = useState("");
   const contenedorRef = useRef<HTMLDivElement>(null);
@@ -233,7 +235,7 @@ export default function PanelCalendario() {
   }, [asesoras, marcas, diasEspeciales, mes, totalDias, fechasFeriado, feriadosConfirmados, hoy]);
 
   const totales = useMemo(() => {
-    const t = { asistencia: 0, ausencia: 0, libre: 0, vacaciones: 0, incapacidad: 0, parcial: 0 };
+    const t = { asistencia: 0, ausencia: 0, libre: 0, vacaciones: 0, incapacidad: 0, parcial: 0, cortas: 0 };
     for (const f of filas) {
       t.asistencia += f.resumen.asistencia;
       t.ausencia += f.resumen.ausencia;
@@ -241,9 +243,38 @@ export default function PanelCalendario() {
       t.vacaciones += f.resumen.vacaciones;
       t.incapacidad += f.resumen.incapacidad;
       t.parcial += f.resumen.parcial;
+      t.cortas += f.resumen.jornadasIncompletas;
     }
     return t;
   }, [filas]);
+
+  // Todo lo que conviene revisar del mes: una sola marca, o jornada con menos de 8 h efectivas.
+  const porRevisar = useMemo(() => {
+    const lista: { fecha: string; nombre: string; punto: string; tipo: "marca" | "corta"; detalle: string }[] = [];
+    for (const f of filas) {
+      for (const d of f.dias) {
+        if (d.fecha > hoy) continue;
+        if (d.estatus === "parcial") {
+          lista.push({
+            fecha: d.fecha,
+            nombre: f.asesora.nombre,
+            punto: f.asesora.punto,
+            tipo: "marca",
+            detalle: d.entrada ? `Pendiente la marca de salida (entrada ${d.entrada})` : `Pendiente la marca de entrada (salida ${d.salida})`,
+          });
+        } else if (d.estatus === "asistencia" && d.horas !== null && d.horas < 8) {
+          lista.push({
+            fecha: d.fecha,
+            nombre: f.asesora.nombre,
+            punto: f.asesora.punto,
+            tipo: "corta",
+            detalle: `Jornada de ${d.horas.toFixed(1)} h efectivas (${d.entrada} a ${d.salida})${d.entradaOriginal || d.salidaOriginal ? " · ya ajustada" : ""}`,
+          });
+        }
+      }
+    }
+    return lista.sort((a, b) => b.fecha.localeCompare(a.fecha) || a.nombre.localeCompare(b.nombre, "es"));
+  }, [filas, hoy]);
 
   const filasVisibles = useMemo(() => {
     const q = normalizar(busqueda.trim());
@@ -338,9 +369,73 @@ export default function PanelCalendario() {
               </div>
             ))}
           </div>
+          <div className="rounded-xl p-2.5 text-center bg-[#35DCEC] text-[#0B3A41]">
+            <div className="font-extrabold text-lg leading-none">{totales.cortas}</div>
+            <div className="text-[9.5px] uppercase tracking-wide mt-1">Jornadas con menos de 8 h efectivas</div>
+          </div>
           <p className="text-[11px] text-[#6B6D6E] -mt-1">
             Suma de días de todas las asesoras en el mes. Toca una asesora (o un día) para ver el detalle.
           </p>
+
+          <div className="rounded-xl border-2 border-[#35DCEC] bg-white p-3 space-y-2">
+            <div className="text-[12.5px] font-bold text-[#0B5F6C]">Por revisar del mes · {porRevisar.length}</div>
+            <p className="text-[11px] text-[#6B6D6E] leading-snug">
+              Marcas incompletas (falta entrada o salida) y jornadas con menos de 8 horas. Toca "Ver el día" para revisarlas o corregir las horas, Nuria.
+            </p>
+            <div className="flex gap-1.5 flex-wrap">
+              {(
+                [
+                  ["todo", "Todo", porRevisar.length],
+                  ["marca", "Falta una marca", porRevisar.filter((x) => x.tipo === "marca").length],
+                  ["corta", "Jornada corta", porRevisar.filter((x) => x.tipo === "corta").length],
+                ] as ["todo" | "marca" | "corta", string, number][]
+              ).map(([id, etiqueta, n]) => (
+                <button
+                  key={id}
+                  onClick={() => setFiltroRevisar(id)}
+                  className={`rounded-full px-3 py-1.5 text-[12px] font-semibold ${
+                    filtroRevisar === id ? "bg-[#0B5F6C] text-white" : "bg-[#E4F7F9] text-[#0B5F6C]"
+                  }`}
+                >
+                  {etiqueta} · {n}
+                </button>
+              ))}
+            </div>
+            {(() => {
+              const visibles = porRevisar.filter((x) => filtroRevisar === "todo" || x.tipo === filtroRevisar);
+              const mostrados = verTodoRevisar ? visibles : visibles.slice(0, 12);
+              if (visibles.length === 0) return <p className="text-[12px] text-[#1E8A5F] font-semibold">¡Todo en orden por ahora!</p>;
+              return (
+                <>
+                  <ul className="space-y-1.5">
+                    {mostrados.map((x, i) => (
+                      <li key={`${x.fecha}-${x.nombre}-${i}`} className="flex items-center gap-2 rounded-lg bg-[#F2F8F9] px-2.5 py-2">
+                        <div className="flex-1 min-w-0">
+                          <div className="text-[12px] font-bold truncate">{x.nombre}</div>
+                          <div className="text-[11px] text-[#6B6D6E] leading-snug">
+                            {tituloDia(x.fecha)} · {x.detalle}
+                          </div>
+                        </div>
+                        {onVerDia && (
+                          <button
+                            onClick={() => onVerDia(x.fecha)}
+                            className="flex-none rounded-lg bg-[#0B5F6C] text-white px-2.5 py-1.5 text-[11.5px] font-semibold"
+                          >
+                            Ver el día
+                          </button>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                  {visibles.length > 12 && (
+                    <button onClick={() => setVerTodoRevisar((v) => !v)} className="w-full text-[12px] font-semibold text-[#0F7A8A] py-1">
+                      {verTodoRevisar ? "Ver menos" : `Ver los ${visibles.length}`}
+                    </button>
+                  )}
+                </>
+              );
+            })()}
+          </div>
 
           <div className="flex gap-1.5">
             {(
@@ -417,7 +512,8 @@ export default function PanelCalendario() {
                         {r.libre > 0 && <span className="rounded-full px-2 py-0.5 bg-[#E4F7F9] text-[#0F7A8A]">{r.libre} libres</span>}
                         {r.vacaciones > 0 && <span className="rounded-full px-2 py-0.5 bg-[#0B5F6C] text-white">{r.vacaciones} vacaciones</span>}
                         {r.incapacidad > 0 && <span className="rounded-full px-2 py-0.5 bg-[#CFF0F3] text-[#0B5F6C]">{r.incapacidad} incapacidad</span>}
-                        {r.parcial > 0 && <span className="rounded-full px-2 py-0.5 bg-[#35DCEC] text-[#0B3A41]">{r.parcial} por completar</span>}
+                        {r.parcial > 0 && <span className="rounded-full px-2 py-0.5 bg-[#35DCEC] text-[#0B3A41]">{r.parcial} marca(s) por completar</span>}
+                        {r.jornadasIncompletas > 0 && <span className="rounded-full px-2 py-0.5 bg-[#35DCEC] text-[#0B3A41]">{r.jornadasIncompletas} jornada(s) corta(s)</span>}
                         {r.tardes > 0 && <span className="rounded-full px-2 py-0.5 bg-[#F2F8F9] text-[#3A3B3C]">{r.tardes} tardes</span>}
                         {r.asistencia > 0 && (
                           <span className="rounded-full px-2 py-0.5 bg-[#F2F8F9] text-[#3A3B3C]">{r.horasEfectivas.toFixed(0)} h efectivas</span>

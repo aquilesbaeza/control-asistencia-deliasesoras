@@ -44,8 +44,8 @@ function sumarDias(iso: string, delta: number) {
   return new Date(Date.UTC(a, m - 1, d + delta)).toISOString().slice(0, 10);
 }
 
-export default function PanelHoy() {
-  const [fecha, setFecha] = useState(() => ahoraCR().fecha);
+export default function PanelHoy({ fechaInicial }: { fechaInicial?: string }) {
+  const [fecha, setFecha] = useState(() => fechaInicial ?? ahoraCR().fecha);
   const [filas, setFilas] = useState<FilaDia[]>([]);
   const [esFeriado, setEsFeriado] = useState(false);
   const [descFeriado, setDescFeriado] = useState<string | null>(null);

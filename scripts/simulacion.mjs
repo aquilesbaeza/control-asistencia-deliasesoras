@@ -77,6 +77,11 @@ async function sembrar() {
   for (const i of Object.keys(nuevos)) { delete vacaciones[i]; delete incapacidades[i]; }
   const forzados = { 0: { 2: "sinSalida", 3: "sinEntrada", 4: "corta", 8: "tarde", 9: "ausencia" } };
   const idxMarcaEnLibre = 5;
+  // Ejemplos garantizados de hoy y ayer para que siempre se vean anomalias recientes.
+  const forzadosPorDia = {
+    [DIA_HOY]: { 12: "sinSalida", 13: "sinEntrada", 14: "corta", 16: "corta" },
+    [DIA_HOY - 1]: { 12: "corta", 13: "sinSalida", 14: "sinEntrada", 17: "sinSalida" },
+  };
   const corregidas = { 8: [9], 12: [11], 17: [17], 24: [18] }; // salieron antes por una cita y Nuria completo la jornada
   const marcasCorregidas = [];
 
@@ -118,7 +123,7 @@ async function sembrar() {
         continue;
       }
 
-      let escenario = forzados[i]?.[dia];
+      let escenario = forzados[i]?.[dia] ?? forzadosPorDia[dia]?.[i];
       if (!escenario) {
         const r = azar();
         escenario = r < 0.03 ? "ausencia" : r < 0.05 ? "sinEntrada" : r < 0.08 ? "sinSalida" : r < 0.13 ? "corta" : r < 0.21 ? "tarde" : "normal";
