@@ -82,3 +82,7 @@ create table if not exists comentarios (
   creado_en timestamptz not null default now()
 );
 create index if not exists comentarios_fecha_idx on comentarios (fecha);
+
+-- Correccion manual de horas (Nuria): hora de la foto y motivo.
+alter table marcas add column if not exists hora_original time;
+alter table marcas add column if not exists motivo_correccion text;

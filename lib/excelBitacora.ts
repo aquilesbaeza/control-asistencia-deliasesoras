@@ -52,6 +52,15 @@ export async function generarExcelBitacora(
         );
       }
 
+      // Constancia de las horas que Nuria corrigio (hora de la foto -> hora corregida) y el motivo.
+      const cambios: string[] = [];
+      if (dia.entrada?.hora_original) cambios.push(`entrada ${dia.entrada.hora_original.slice(0, 5)} → ${dia.entrada.hora.slice(0, 5)}`);
+      if (dia.salida?.hora_original) cambios.push(`salida ${dia.salida.hora_original.slice(0, 5)} → ${dia.salida.hora.slice(0, 5)}`);
+      if (cambios.length > 0) {
+        const motivo = dia.entrada?.motivo_correccion ?? dia.salida?.motivo_correccion;
+        comentarios.push(`Horas ajustadas por Nuria: ${cambios.join(", ")}${motivo ? ` (${motivo})` : ""}`);
+      }
+
       const fila = hoja.addRow({
         punto: asesora.punto,
         nombre: asesora.nombre,

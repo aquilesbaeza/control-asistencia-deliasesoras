@@ -19,6 +19,8 @@ export type Marca = {
   tipo: TipoMarca;
   foto_url: string | null;
   origen: "ocr" | "manual";
+  hora_original?: string | null; // hora de la foto, si Nuria la corrigio
+  motivo_correccion?: string | null;
   creado_en: string;
 };
 
@@ -71,6 +73,8 @@ export type Comentario = {
   creado_en: string;
   asesoras?: { nombre: string; punto: string } | null;
 };
+
+export const MOTIVOS_CORRECCION = ["Cita médica", "Asunto personal", "Emergencia familiar", "Error de lectura de la foto", "Otro"] as const;
 
 export type Feriado = {
   id: string;

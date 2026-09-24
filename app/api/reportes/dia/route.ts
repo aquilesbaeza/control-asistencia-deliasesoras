@@ -86,6 +86,9 @@ export async function GET(req: NextRequest) {
       if (diferencia > TOLERANCIA_TARDE_MIN) minutosTarde = diferencia;
     }
 
+    const corregida = !!(resumen?.entrada?.hora_original || resumen?.salida?.hora_original);
+    const motivoCorreccion = resumen?.entrada?.motivo_correccion ?? resumen?.salida?.motivo_correccion ?? null;
+
     let comentario = "";
     let estado: "ok" | "warn" | "info" = "info";
 
@@ -108,6 +111,9 @@ export async function GET(req: NextRequest) {
       } else {
         comentario = `Jornada completa · ${horas.toFixed(1)}h`;
         estado = "ok";
+      }
+      if (corregida) {
+        comentario += ` · Horas ajustadas por Nuria${motivoCorreccion ? ` (${motivoCorreccion})` : ""}`;
       }
     } else if (resumen?.entrada) {
       if (jornadaTerminada(fecha, resumen.entrada.hora, ahora)) {
@@ -148,6 +154,10 @@ export async function GET(req: NextRequest) {
       especial: !!especial,
       esperada,
       minutosTarde,
+      corregida,
+      entradaOriginal: resumen?.entrada?.hora_original?.slice(0, 5) ?? null,
+      salidaOriginal: resumen?.salida?.hora_original?.slice(0, 5) ?? null,
+      motivoCorreccion,
     });
   }
 

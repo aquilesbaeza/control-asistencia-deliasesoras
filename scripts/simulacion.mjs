@@ -66,7 +66,7 @@ async function sembrar() {
   const azar = rng(2026);
   const marcas = [], especiales = [], comentarios = [];
   const esperado = {}; // nombre -> { dia: codigo | null }
-  const c = { completos: 0, tardes: 0, cortas: 0, sinSalida: 0, sinEntrada: 0, ausencias: 0, libres: 0, vacaciones: 0, incapacidades: 0, feriadoTrabajado: 0, marcasEnLibre: 0, entradaDoble: 0, antesDeIngreso: 0 };
+  const c = { corregidas: 0, completos: 0, tardes: 0, cortas: 0, sinSalida: 0, sinEntrada: 0, ausencias: 0, libres: 0, vacaciones: 0, incapacidades: 0, feriadoTrabajado: 0, marcasEnLibre: 0, entradaDoble: 0, antesDeIngreso: 0 };
 
   const FERIADO = 15;
   const trabajanFeriado = new Set([1, 6, 13, 22]);
@@ -77,6 +77,8 @@ async function sembrar() {
   for (const i of Object.keys(nuevos)) { delete vacaciones[i]; delete incapacidades[i]; }
   const forzados = { 0: { 2: "sinSalida", 3: "sinEntrada", 4: "corta", 8: "tarde", 9: "ausencia" } };
   const idxMarcaEnLibre = 5;
+  const corregidas = { 8: [9], 12: [11], 17: [17], 24: [18] }; // salieron antes por una cita y Nuria completo la jornada
+  const marcasCorregidas = [];
 
   asesoras.forEach((a, i) => {
     esperado[a.nombre] = {};
@@ -129,6 +131,13 @@ async function sembrar() {
       if (escenario === "sinSalida") { marcas.push({ asesora_id: a.id, fecha, hora: hhmm(entradaMin), tipo: "entrada", origen: "ocr" }); esperado[a.nombre][dia] = 1; c.sinSalida++; continue; }
       if (escenario === "sinEntrada") { marcas.push({ asesora_id: a.id, fecha, hora: hhmm(salidaMin), tipo: "salida", origen: "ocr" }); esperado[a.nombre][dia] = 1; c.sinEntrada++; continue; }
 
+      if (escenario === "normal" && (corregidas[i] ?? []).includes(dia)) {
+        // Foto original: se fue a las ~15:30; Nuria completa la jornada con el motivo.
+        marcas.push({ asesora_id: a.id, fecha, hora: hhmm(entradaMin), tipo: "entrada", origen: "ocr" });
+        marcasCorregidas.push({ asesora_id: a.id, fecha, hora: hhmm(salidaMin), tipo: "salida", origen: "manual", hora_original: hhmm(entradaMin + 450), motivo_correccion: "Cita médica (simulacion)" });
+        esperado[a.nombre][dia] = 1; c.corregidas++;
+        continue;
+      }
       marcas.push({ asesora_id: a.id, fecha, hora: hhmm(entradaMin), tipo: "entrada", origen: "ocr" });
       marcas.push({ asesora_id: a.id, fecha, hora: hhmm(salidaMin), tipo: "salida", origen: "ocr" });
       if (i === 3 && dia === 10) { marcas.push({ asesora_id: a.id, fecha, hora: hhmm(entradaMin + 4), tipo: "entrada", origen: "ocr" }); c.entradaDoble++; }
@@ -156,6 +165,19 @@ async function sembrar() {
   mkdirSync("simulacion", { recursive: true });
   const ids = {};
   await insertar("marcas", marcas, ids);
+  // Marcas corregidas por Nuria (guardan hora original y motivo); si aun falta la migracion v4 se cargan sin esos datos.
+  {
+    const antes = ids.marcas?.length ?? 0;
+    const { data, error: errCorr } = await supabase.from("marcas").insert(marcasCorregidas).select("id");
+    if (errCorr) {
+      console.log("AVISO: faltan las columnas de correccion (migracion v4); las salidas corregidas se cargan sin hora original.");
+      const simples = marcasCorregidas.map(({ hora_original, motivo_correccion, ...resto }) => resto);
+      const { data: d2, error: e2 } = await supabase.from("marcas").insert(simples).select("id");
+      if (e2) throw new Error(e2.message);
+      (ids.marcas ??= []).push(...d2.map((d) => d.id));
+    } else (ids.marcas ??= []).push(...data.map((d) => d.id));
+    void antes;
+  }
   await insertar("dias_especiales", especiales, ids);
   await insertar("comentarios", comentarios, ids);
   // Feriado real de Costa Rica (15 de setiembre): solo se agrega si no existia.

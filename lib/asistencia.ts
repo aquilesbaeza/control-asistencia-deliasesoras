@@ -188,7 +188,10 @@ export type DiaCalculado = {
   nota: string | null;
   entrada: string | null; // HH:MM
   salida: string | null; // HH:MM
-  horas: number | null;
+  horas: number | null; // horas efectivas segun las marcas (con las correcciones de Nuria)
+  entradaOriginal: string | null; // hora de la foto antes de corregirla
+  salidaOriginal: string | null;
+  motivoCorreccion: string | null;
   minutosTarde: number | null;
 };
 
@@ -242,6 +245,9 @@ export function calcularMesAsesora(p: {
       entrada,
       salida,
       horas: resumen?.horasEfectivas ?? null,
+      entradaOriginal: resumen?.entrada?.hora_original?.slice(0, 5) ?? null,
+      salidaOriginal: resumen?.salida?.hora_original?.slice(0, 5) ?? null,
+      motivoCorreccion: resumen?.entrada?.motivo_correccion ?? resumen?.salida?.motivo_correccion ?? null,
       minutosTarde,
     });
   }

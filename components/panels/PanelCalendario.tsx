@@ -5,6 +5,7 @@ import SelectorMes, { mesActual } from "@/components/SelectorMes";
 import FormPermisos from "@/components/FormPermisos";
 import PreguntaFeriados from "@/components/PreguntaFeriados";
 import Comentarios from "@/components/Comentarios";
+import CorregirHoras from "@/components/CorregirHoras";
 import {
   calcularMesAsesora,
   resumirMes,
@@ -67,6 +68,9 @@ function describirDia(d: DiaCalculado): string {
   } else {
     partes.push(d.manual ? "Registrado por Nuria" : "");
   }
+  if (d.entradaOriginal || d.salidaOriginal) {
+    partes.push(`Horas ajustadas por Nuria (foto: entrada ${d.entradaOriginal ?? d.entrada ?? "—"}, salida ${d.salidaOriginal ?? d.salida ?? "—"})${d.motivoCorreccion ? ` · ${d.motivoCorreccion}` : ""}`);
+  }
   if (d.marcasEnPermiso) {
     partes.push(`Ojo: tiene marcas ese día (entrada ${d.entrada ?? "—"}, salida ${d.salida ?? "—"}); ¿trabajó pese al permiso?`);
   }
@@ -78,14 +82,17 @@ function DetalleDia({
   fila,
   dia,
   onElegir,
+  onCorregido,
   onCerrar,
 }: {
   fila: FilaAsesora;
   dia: DiaCalculado;
   onElegir: (tipo: EstatusDia | "auto") => void;
+  onCorregido: () => void;
   onCerrar: () => void;
 }) {
   const estilo = ESTILO[dia.estatus];
+  const [corrigiendo, setCorrigiendo] = useState(false);
   return (
     <div className="rounded-xl border-2 border-[#1EA6B8] bg-white p-3 space-y-2">
       <div className="flex items-start gap-2">
@@ -106,6 +113,30 @@ function DetalleDia({
         </span>
         <span className="text-[12px] leading-snug">{describirDia(dia)}</span>
       </div>
+      {corrigiendo ? (
+        <CorregirHoras
+          asesoraId={fila.asesora.id}
+          nombre={fila.asesora.nombre}
+          fecha={dia.fecha}
+          entrada={dia.entrada}
+          salida={dia.salida}
+          entradaOriginal={dia.entradaOriginal}
+          salidaOriginal={dia.salidaOriginal}
+          motivoPrevio={dia.motivoCorreccion}
+          onGuardado={() => {
+            setCorrigiendo(false);
+            onCorregido();
+          }}
+          onCerrar={() => setCorrigiendo(false)}
+        />
+      ) : (
+        <button
+          onClick={() => setCorrigiendo(true)}
+          className="w-full rounded-lg bg-[#0B5F6C] text-white py-2.5 text-[12.5px] font-semibold"
+        >
+          Corregir horas de entrada y salida
+        </button>
+      )}
       <div className="grid grid-cols-2 gap-1.5">
         {MANUALES.map((t) => (
           <button
@@ -269,6 +300,10 @@ export default function PanelCalendario() {
         fila={filaSel}
         dia={diaSel}
         onElegir={(t) => void elegir(filaSel, diaSel, t)}
+        onCorregido={() => {
+          void cargar();
+          setRefresco((v) => v + 1);
+        }}
         onCerrar={() => setSeleccion(null)}
       />
     ) : null;

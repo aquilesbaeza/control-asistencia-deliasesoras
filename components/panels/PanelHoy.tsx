@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import FormPermisos from "@/components/FormPermisos";
 import PreguntaFeriados from "@/components/PreguntaFeriados";
 import Comentarios from "@/components/Comentarios";
+import CorregirHoras from "@/components/CorregirHoras";
 import { ahoraCR } from "@/lib/tiempo";
 
 type FilaDia = {
@@ -18,6 +19,10 @@ type FilaDia = {
   especial: boolean;
   esperada: string;
   minutosTarde: number | null;
+  corregida: boolean;
+  entradaOriginal: string | null;
+  salidaOriginal: string | null;
+  motivoCorreccion: string | null;
 };
 
 type Filtro = "todas" | "sin_entrada" | "tarde" | "anomalias";
@@ -61,6 +66,7 @@ export default function PanelHoy() {
 
   const recargar = () => setVersion((v) => v + 1);
 
+  const [corrigiendoId, setCorrigiendoId] = useState<string | null>(null);
   const [busqueda, setBusqueda] = useState("");
   const [punto, setPunto] = useState("");
   const [filtro, setFiltro] = useState<Filtro>("todas");
@@ -255,6 +261,35 @@ export default function PanelHoy() {
                 >
                   {f.comentario}
                 </span>
+              )}
+
+              {corrigiendoId === f.asesora_id ? (
+                <div className="mt-2">
+                  <CorregirHoras
+                    asesoraId={f.asesora_id}
+                    nombre={f.nombre}
+                    fecha={fecha}
+                    entrada={f.entrada}
+                    salida={f.salida}
+                    entradaOriginal={f.entradaOriginal}
+                    salidaOriginal={f.salidaOriginal}
+                    motivoPrevio={f.motivoCorreccion}
+                    onGuardado={() => {
+                      setCorrigiendoId(null);
+                      recargar();
+                    }}
+                    onCerrar={() => setCorrigiendoId(null)}
+                  />
+                </div>
+              ) : (
+                <button
+                  onClick={() => setCorrigiendoId(f.asesora_id)}
+                  className={`mt-2 rounded-lg px-3 py-1.5 text-[12px] font-semibold ${
+                    f.estado === "warn" ? "bg-[#0B5F6C] text-white" : "bg-[#E4F7F9] text-[#0B5F6C]"
+                  }`}
+                >
+                  {f.estado === "warn" ? "Corregir horas" : "Editar horas"}
+                </button>
               )}
             </div>
           ))}
