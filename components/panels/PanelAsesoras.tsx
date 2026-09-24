@@ -182,7 +182,7 @@ export default function PanelAsesoras() {
             className="block w-full rounded-lg border border-[#DDE7E8] p-2.5 text-[13px]"
           />
           <label className="block text-[10.5px] font-bold text-[#6B6D6E] uppercase tracking-wide">
-            Hora de entrada (opcional)
+            Hora de entrada (solo si es fija)
             <input
               type="time"
               value={horaNueva}
@@ -233,7 +233,7 @@ export default function PanelAsesoras() {
                       />
                     </label>
                     <label className="block text-[10px] font-bold text-[#6B6D6E] uppercase tracking-wide">
-                      Hora de entrada (horario)
+                      Hora de entrada (solo si es fija)
                       <input
                         type="time"
                         value={horaEdicion}

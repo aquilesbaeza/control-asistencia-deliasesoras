@@ -17,7 +17,7 @@ type FilaDia = {
   comentario: string;
   estado: "ok" | "warn" | "info";
   especial: boolean;
-  esperada: string;
+  esperada: string | null;
   minutosTarde: number | null;
   corregida: boolean;
   entradaOriginal: string | null;
@@ -184,7 +184,7 @@ export default function PanelHoy() {
               [
                 ["todas", "Todas", filas.length],
                 ["sin_entrada", "Sin entrada", conteo.sin_entrada],
-                ["tarde", "Tarde", conteo.tarde],
+                ...(filas.some((x) => x.esperada) ? [["tarde", "Tarde", conteo.tarde] as [Filtro, string, number]] : []),
                 ["anomalias", "Por revisar", conteo.anomalias],
               ] as [Filtro, string, number][]
             ).map(([id, etiqueta, n]) => (
@@ -231,10 +231,12 @@ export default function PanelHoy() {
               <div className="font-bold text-[13px]">{f.nombre}</div>
               <div className="text-[11px] text-[#6B6D6E]">{f.punto}</div>
               <div className="flex gap-4 mt-1.5 text-[11px] tabular-nums">
-                <span>
-                  <b className="block text-[9px] text-[#6B6D6E] uppercase font-semibold">Horario</b>
-                  {f.esperada}
-                </span>
+                {f.esperada && (
+                  <span>
+                    <b className="block text-[9px] text-[#6B6D6E] uppercase font-semibold">Horario</b>
+                    {f.esperada}
+                  </span>
+                )}
                 <span>
                   <b className="block text-[9px] text-[#6B6D6E] uppercase font-semibold">Entrada</b>
                   {f.entrada ?? "—"}

@@ -164,7 +164,6 @@ export function detectarAnomaliaInmediata(
 // Excel de asistencia, para que nunca se contradigan.
 // ---------------------------------------------------------------------------
 
-export const HORA_ENTRADA_POR_DEFECTO = "08:00";
 export const TOLERANCIA_TARDE_MIN = 10;
 export const HORAS_JORNADA_EFECTIVA = 8;
 
@@ -209,7 +208,8 @@ export function calcularMesAsesora(p: {
 }): DiaCalculado[] {
   const porDia = agruparPorDia(p.marcas);
   const especialPorFecha = new Map(p.especiales.map((e) => [e.fecha, e]));
-  const esperada = (p.horaEntradaEsperada ?? HORA_ENTRADA_POR_DEFECTO).slice(0, 5);
+  // El horario es variable: sin hora de entrada definida no se calcula tardanza.
+  const esperada = p.horaEntradaEsperada ? p.horaEntradaEsperada.slice(0, 5) : null;
   const resultado: DiaCalculado[] = [];
 
   for (let dia = 1; dia <= p.totalDias; dia++) {
@@ -220,7 +220,7 @@ export function calcularMesAsesora(p: {
     const salida = resumen?.salida?.hora.slice(0, 5) ?? null;
 
     let minutosTarde: number | null = null;
-    if (entrada) {
+    if (entrada && esperada) {
       const diferencia = horaAMinutos(entrada) - horaAMinutos(esperada);
       if (diferencia > TOLERANCIA_TARDE_MIN) minutosTarde = diferencia;
     }

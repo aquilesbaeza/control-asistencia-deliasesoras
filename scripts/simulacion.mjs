@@ -171,7 +171,7 @@ async function sembrar() {
     const { data, error: errCorr } = await supabase.from("marcas").insert(marcasCorregidas).select("id");
     if (errCorr) {
       console.log("AVISO: faltan las columnas de correccion (migracion v4); las salidas corregidas se cargan sin hora original.");
-      const simples = marcasCorregidas.map(({ hora_original, motivo_correccion, ...resto }) => resto);
+      const simples = marcasCorregidas.map((m) => ({ asesora_id: m.asesora_id, fecha: m.fecha, hora: m.hora, tipo: m.tipo, origen: m.origen }));
       const { data: d2, error: e2 } = await supabase.from("marcas").insert(simples).select("id");
       if (e2) throw new Error(e2.message);
       (ids.marcas ??= []).push(...d2.map((d) => d.id));

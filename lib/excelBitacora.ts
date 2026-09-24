@@ -1,5 +1,5 @@
 import ExcelJS from "exceljs";
-import { agruparPorDia, HORA_ENTRADA_POR_DEFECTO, TOLERANCIA_TARDE_MIN } from "./asistencia";
+import { agruparPorDia, TOLERANCIA_TARDE_MIN } from "./asistencia";
 import { horaAMinutos } from "./tiempo";
 import type { Asesora, Comentario, Marca } from "./tipos";
 
@@ -39,8 +39,8 @@ export async function generarExcelBitacora(
 
     for (const dia of dias) {
       const comentarios: string[] = [];
-      if (dia.entrada) {
-        const esperada = (asesora.hora_entrada ?? HORA_ENTRADA_POR_DEFECTO).slice(0, 5);
+      if (dia.entrada && asesora.hora_entrada) {
+        const esperada = asesora.hora_entrada.slice(0, 5);
         const tarde = horaAMinutos(dia.entrada.hora) - horaAMinutos(esperada);
         if (tarde > TOLERANCIA_TARDE_MIN) comentarios.push(`Llegada tardía (+${tarde} min)`);
       }

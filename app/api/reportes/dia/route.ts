@@ -8,7 +8,6 @@ import { ETIQUETA_ESTATUS, CODIGO_ESTATUS } from "@/lib/tipos";
 import type { Asesora, DiaEspecial, Marca } from "@/lib/tipos";
 
 const HORAS_JORNADA = 8;
-const HORA_ENTRADA_POR_DEFECTO = "08:00";
 const TOLERANCIA_ENTRADA_MIN = 30;
 const TOLERANCIA_TARDE_MIN = 10;
 
@@ -79,9 +78,10 @@ export async function GET(req: NextRequest) {
     const fueraDeContrato = (asesora.fecha_ingreso && fecha < asesora.fecha_ingreso) || (asesora.fecha_baja && fecha > asesora.fecha_baja);
     if (fueraDeContrato && !tieneMarcas) continue;
 
-    const esperada = (asesora.hora_entrada ?? HORA_ENTRADA_POR_DEFECTO).slice(0, 5);
+    // El horario es variable: solo se compara si Nuria definio la hora de entrada de esta asesora.
+    const esperada = asesora.hora_entrada ? asesora.hora_entrada.slice(0, 5) : null;
     let minutosTarde: number | null = null;
-    if (resumen?.entrada) {
+    if (esperada && resumen?.entrada) {
       const diferencia = horaAMinutos(resumen.entrada.hora) - horaAMinutos(esperada);
       if (diferencia > TOLERANCIA_TARDE_MIN) minutosTarde = diferencia;
     }
@@ -136,7 +136,7 @@ export async function GET(req: NextRequest) {
         estado = "warn";
       }
     } else if (fecha === ahora.fecha) {
-      if (ahora.minutos > horaAMinutos(esperada) + TOLERANCIA_ENTRADA_MIN) {
+      if (esperada && ahora.minutos > horaAMinutos(esperada) + TOLERANCIA_ENTRADA_MIN) {
         comentario = "Aún no registra su entrada";
         estado = "warn";
       }
