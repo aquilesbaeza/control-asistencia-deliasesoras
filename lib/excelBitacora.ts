@@ -1,10 +1,12 @@
 import ExcelJS from "exceljs";
-import { agruparPorDia } from "./asistencia";
-import type { Asesora, Marca } from "./tipos";
+import { agruparPorDia, HORA_ENTRADA_POR_DEFECTO, TOLERANCIA_TARDE_MIN } from "./asistencia";
+import { horaAMinutos } from "./tiempo";
+import type { Asesora, Comentario, Marca } from "./tipos";
 
 export async function generarExcelBitacora(
   asesoras: Asesora[],
-  marcasPorAsesora: Map<string, Marca[]>
+  marcasPorAsesora: Map<string, Marca[]>,
+  comentariosMes: Comentario[] = []
 ): Promise<Buffer> {
   const workbook = new ExcelJS.Workbook();
   const hoja = workbook.addWorksheet("Bitacora de marcas");
@@ -37,11 +39,16 @@ export async function generarExcelBitacora(
 
     for (const dia of dias) {
       const comentarios: string[] = [];
-      if (dia.entrada && !dia.salida) comentarios.push("Falta marca de salida");
-      if (dia.salida && !dia.entrada) comentarios.push("Falta marca de entrada");
+      if (dia.entrada) {
+        const esperada = (asesora.hora_entrada ?? HORA_ENTRADA_POR_DEFECTO).slice(0, 5);
+        const tarde = horaAMinutos(dia.entrada.hora) - horaAMinutos(esperada);
+        if (tarde > TOLERANCIA_TARDE_MIN) comentarios.push(`Llegada tardía (+${tarde} min)`);
+      }
+      if (dia.entrada && !dia.salida) comentarios.push("Pendiente la marca de salida");
+      if (dia.salida && !dia.entrada) comentarios.push("Pendiente la marca de entrada");
       if (dia.horasEfectivas !== null && dia.horasEfectivas < HORAS_JORNADA) {
         comentarios.push(
-          `Menos de ${HORAS_JORNADA}h efectivas (${dia.horasEfectivas.toFixed(1)}h)`
+          `Jornada de ${dia.horasEfectivas.toFixed(1)} h efectivas (menos de las ${HORAS_JORNADA} h esperadas)`
         );
       }
 
@@ -63,6 +70,29 @@ export async function generarExcelBitacora(
 
   hoja.views = [{ state: "frozen", ySplit: 1 }];
   hoja.autoFilter = { from: "A1", to: "G1" };
+
+  // Segunda hoja: comentarios estructurados (fecha, asunto, asesora, situacion).
+  const hojaComentarios = workbook.addWorksheet("Comentarios");
+  hojaComentarios.columns = [
+    { header: "Fecha", key: "fecha", width: 14 },
+    { header: "Asunto", key: "asunto", width: 20 },
+    { header: "Asesora", key: "nombre", width: 36 },
+    { header: "Punto", key: "punto", width: 28 },
+    { header: "Situación", key: "situacion", width: 60 },
+  ];
+  const encabezadoComentarios = hojaComentarios.getRow(1);
+  encabezadoComentarios.font = { bold: true, color: { argb: "FFFFFFFF" } };
+  encabezadoComentarios.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF196B24" } };
+  for (const c of comentariosMes) {
+    hojaComentarios.addRow({
+      fecha: c.fecha,
+      asunto: c.asunto,
+      nombre: c.asesoras?.nombre ?? "General",
+      punto: c.asesoras?.punto ?? "",
+      situacion: c.situacion,
+    });
+  }
+  hojaComentarios.views = [{ state: "frozen", ySplit: 1 }];
 
   const buffer = await workbook.xlsx.writeBuffer();
   return Buffer.from(buffer);

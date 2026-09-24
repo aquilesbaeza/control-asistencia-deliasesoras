@@ -1,10 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
-import { agruparPorDia } from "@/lib/asistencia";
+import { agruparPorDia, jornadaTerminada } from "@/lib/asistencia";
+import { ahoraCR, horaAMinutos } from "@/lib/tiempo";
+import { mesConfirmado } from "@/lib/feriados";
 import { ETIQUETA_ESTATUS, CODIGO_ESTATUS } from "@/lib/tipos";
 import type { Asesora, DiaEspecial, Marca } from "@/lib/tipos";
 
 const HORAS_JORNADA = 8;
+const HORA_ENTRADA_POR_DEFECTO = "08:00";
+const TOLERANCIA_ENTRADA_MIN = 30;
+const TOLERANCIA_TARDE_MIN = 10;
 
 export async function GET(req: NextRequest) {
   const fecha = req.nextUrl.searchParams.get("fecha"); // YYYY-MM-DD
@@ -25,7 +30,8 @@ export async function GET(req: NextRequest) {
   }
 
   const esFeriado = !!feriado;
-  const hoyISO = new Date().toISOString().slice(0, 10);
+  const ahora = ahoraCR();
+  const feriadosConfirmados = await mesConfirmado(supabase, fecha.slice(0, 7));
 
   const marcasPorAsesora = new Map<string, Marca[]>();
   for (const m of (marcas ?? []) as Marca[]) {
@@ -44,39 +50,57 @@ export async function GET(req: NextRequest) {
     const especial = especialPorAsesora.get(asesora.id) ?? null;
     const tieneMarcas = marcasDia.length > 0;
 
-    // Feriado sin marcas: se trabaja de forma opcional, no se lista.
-    if (esFeriado && !tieneMarcas && !especial) continue;
+    // Feriado: solo se listan quienes lo trabajaron (se trabaja de forma opcional).
+    if (esFeriado && !tieneMarcas) continue;
+
+    const esperada = (asesora.hora_entrada ?? HORA_ENTRADA_POR_DEFECTO).slice(0, 5);
+    let minutosTarde: number | null = null;
+    if (resumen?.entrada) {
+      const diferencia = horaAMinutos(resumen.entrada.hora) - horaAMinutos(esperada);
+      if (diferencia > TOLERANCIA_TARDE_MIN) minutosTarde = diferencia;
+    }
 
     let comentario = "";
     let estado: "ok" | "warn" | "info" = "info";
 
     if (especial) {
+      // Lo que Nuria registra a mano manda: nunca se reporta como ausencia ni falta de marca.
       comentario = ETIQUETA_ESTATUS[CODIGO_ESTATUS[especial.tipo]];
       estado = "info";
     } else if (resumen?.entrada && resumen?.salida) {
       const horas = resumen.horasEfectivas ?? 0;
       if (horas < HORAS_JORNADA) {
-        comentario = `No cumple jornada efectiva · ${horas.toFixed(1)}h`;
+        comentario = `Jornada de ${horas.toFixed(1)} h (menos de las 8 h efectivas)`;
         estado = "warn";
       } else {
         comentario = `Jornada completa · ${horas.toFixed(1)}h`;
         estado = "ok";
       }
-    } else if (resumen?.entrada && !resumen?.salida) {
-      comentario = "Falta marca de salida";
+    } else if (resumen?.entrada) {
+      if (jornadaTerminada(fecha, resumen.entrada.hora, ahora)) {
+        comentario = "Pendiente la marca de salida";
+        estado = "warn";
+      } else {
+        comentario = "En jornada";
+        estado = "info";
+      }
+    } else if (resumen?.salida) {
+      comentario = "Pendiente la marca de entrada";
       estado = "warn";
-    } else if (resumen?.salida && !resumen?.entrada) {
-      comentario = "Falta marca de entrada";
-      estado = "warn";
-    } else if (fecha > hoyISO) {
-      comentario = "";
-      estado = "info";
-    } else if (esFeriado) {
-      comentario = "Feriado, no trabajó";
-      estado = "info";
-    } else {
-      comentario = "Ausencia";
-      estado = "warn";
+    } else if (fecha < ahora.fecha) {
+      if (esFeriado) {
+        comentario = "Feriado, no trabajó";
+      } else if (!feriadosConfirmados) {
+        comentario = "Pendiente confirmar los feriados del mes";
+      } else {
+        comentario = "No registra marcas este día (ausencia)";
+        estado = "warn";
+      }
+    } else if (fecha === ahora.fecha) {
+      if (ahora.minutos > horaAMinutos(esperada) + TOLERANCIA_ENTRADA_MIN) {
+        comentario = "Aún no registra su entrada";
+        estado = "warn";
+      }
     }
 
     filas.push({
@@ -88,8 +112,17 @@ export async function GET(req: NextRequest) {
       horasEfectivas: resumen?.horasEfectivas ?? null,
       comentario,
       estado,
+      especial: !!especial,
+      esperada,
+      minutosTarde,
     });
   }
 
-  return NextResponse.json({ fecha, esFeriado, feriadoDescripcion: feriado?.descripcion ?? null, filas });
+  return NextResponse.json({
+    fecha,
+    esFeriado,
+    feriadoDescripcion: feriado?.descripcion ?? null,
+    feriadosConfirmados,
+    filas,
+  });
 }

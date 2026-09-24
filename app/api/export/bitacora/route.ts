@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { generarExcelBitacora } from "@/lib/excelBitacora";
 import { rangoMes } from "@/lib/asistencia";
-import type { Asesora, Marca } from "@/lib/tipos";
+import { paginar } from "@/lib/paginar";
+import type { Asesora, Comentario, Marca } from "@/lib/tipos";
 
 export async function GET(req: NextRequest) {
   const mes = req.nextUrl.searchParams.get("mes");
@@ -11,9 +12,18 @@ export async function GET(req: NextRequest) {
   const supabase = supabaseAdmin();
   const { desde, hasta } = rangoMes(mes);
 
-  const [{ data: asesoras, error: errAsesoras }, { data: marcas, error: errMarcas }] = await Promise.all([
+  const [{ data: asesoras, error: errAsesoras }, { data: marcas, error: errMarcas }, { data: comentarios }] = await Promise.all([
     supabase.from("asesoras").select("*").order("punto").order("nombre"),
-    supabase.from("marcas").select("*").gte("fecha", desde).lt("fecha", hasta),
+    paginar<Marca>((d, h) =>
+      supabase.from("marcas").select("*").gte("fecha", desde).lt("fecha", hasta).order("fecha").order("hora").order("id").range(d, h)
+    ).then((r) => ({ data: r.data, error: r.error ? { message: r.error } : null })),
+    supabase
+      .from("comentarios")
+      .select("*, asesoras(nombre, punto)")
+      .gte("fecha", desde)
+      .lt("fecha", hasta)
+      .order("fecha")
+      .order("creado_en"),
   ]);
 
   if (errAsesoras || errMarcas) {
@@ -27,7 +37,11 @@ export async function GET(req: NextRequest) {
     marcasPorAsesora.set(marca.asesora_id, lista);
   }
 
-  const buffer = await generarExcelBitacora((asesoras ?? []) as Asesora[], marcasPorAsesora);
+  const buffer = await generarExcelBitacora(
+    (asesoras ?? []) as Asesora[],
+    marcasPorAsesora,
+    (comentarios ?? []) as Comentario[]
+  );
 
   return new NextResponse(new Uint8Array(buffer), {
     headers: {

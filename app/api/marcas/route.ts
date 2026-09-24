@@ -1,20 +1,20 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { detectarAnomaliaInmediata, rangoMes } from "@/lib/asistencia";
+import { paginar } from "@/lib/paginar";
 import type { Marca } from "@/lib/tipos";
 
 export async function GET(req: NextRequest) {
   const mes = req.nextUrl.searchParams.get("mes"); // YYYY-MM
   const supabase = supabaseAdmin();
 
-  let query = supabase.from("marcas").select("*").order("fecha").order("hora");
-  if (mes) {
-    const { desde, hasta } = rangoMes(mes);
-    query = query.gte("fecha", desde).lt("fecha", hasta);
-  }
-
-  const { data, error } = await query;
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  const rango = mes ? rangoMes(mes) : null;
+  const { data, error } = await paginar<Marca>((desde, hasta) => {
+    let query = supabase.from("marcas").select("*").order("fecha").order("hora").order("id");
+    if (rango) query = query.gte("fecha", rango.desde).lt("fecha", rango.hasta);
+    return query.range(desde, hasta);
+  });
+  if (error) return NextResponse.json({ error }, { status: 500 });
   return NextResponse.json({ marcas: data });
 }
 
@@ -34,6 +34,18 @@ export async function POST(req: NextRequest) {
   }
 
   const supabase = supabaseAdmin();
+
+  // Si ya existe una marca igual (misma asesora, dia, tipo y hora), no se duplica.
+  const { data: existentes } = await supabase
+    .from("marcas")
+    .select("id, hora")
+    .eq("asesora_id", asesora_id)
+    .eq("fecha", fecha)
+    .eq("tipo", tipo);
+  if ((existentes ?? []).some((m) => m.hora.slice(0, 5) === hora.slice(0, 5))) {
+    return NextResponse.json({ marca: null, omitida: true, anomalia: null });
+  }
+
   let foto_url: string | null = null;
 
   if (foto_base64) {
@@ -71,7 +83,8 @@ export async function POST(req: NextRequest) {
 
   const anomalia = detectarAnomaliaInmediata(
     (marcasDelDia ?? []) as Marca[],
-    asesora?.nombre ?? "La asesora"
+    asesora?.nombre ?? "La asesora",
+    fecha
   );
 
   return NextResponse.json({ marca, anomalia });

@@ -3,6 +3,7 @@ export type Asesora = {
   nombre: string;
   punto: string;
   activo: boolean;
+  hora_entrada?: string | null; // HH:MM:SS, horario que define Nuria
   creado_en: string;
 };
 
@@ -45,6 +46,28 @@ export const ETIQUETA_ESTATUS: Record<number, string> = {
   3: "Incapacidad",
   4: "Libre",
   5: "Vacaciones",
+};
+
+export const ASUNTOS_COMENTARIO = [
+  "Vacaciones",
+  "Incapacidad",
+  "Ausencia",
+  "Libre",
+  "Renuncia",
+  "Despido",
+  "Nuevo ingreso",
+  "Feriado trabajado",
+  "Otro",
+] as const;
+
+export type Comentario = {
+  id: string;
+  fecha: string;
+  asunto: string;
+  asesora_id: string | null;
+  situacion: string;
+  creado_en: string;
+  asesoras?: { nombre: string; punto: string } | null;
 };
 
 export type Feriado = {

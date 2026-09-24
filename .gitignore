@@ -45,3 +45,4 @@ next-env.d.ts
 
 # fotos de ejemplo con datos personales reales, no se suben al repo
 /assets-ejemplos/
+/simulacion/

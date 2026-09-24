@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { emparejarNombre, leerFotoMarca } from "@/lib/ocrMarca";
+import { ahoraCR } from "@/lib/tiempo";
 
 export async function POST(req: NextRequest) {
   const body = await req.json();
@@ -22,12 +23,15 @@ export async function POST(req: NextRequest) {
 
     const candidatos = emparejarNombre(lectura.nombre_detectado, asesoras ?? []);
 
-    const ahora = new Date();
+    const ahora = ahoraCR();
+    const horaActual = `${String(Math.floor(ahora.minutos / 60)).padStart(2, "0")}:${String(ahora.minutos % 60).padStart(2, "0")}`;
     return NextResponse.json({
       lectura,
       candidatos,
-      sugerencia_fecha: lectura.fecha_detectada ?? ahora.toISOString().slice(0, 10),
-      sugerencia_hora: lectura.hora_detectada ?? ahora.toTimeString().slice(0, 5),
+      sugerencia_fecha: lectura.fecha_detectada ?? ahora.fecha,
+      sugerencia_hora: lectura.hora_detectada ?? horaActual,
+      fecha_leida: !!lectura.fecha_detectada,
+      hora_leida: !!lectura.hora_detectada,
     });
   } catch (err) {
     return NextResponse.json(

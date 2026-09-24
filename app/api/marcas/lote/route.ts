@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
-import { detectarAnomaliaInmediata } from "@/lib/asistencia";
+import { claveMarca, detectarAnomaliaInmediata } from "@/lib/asistencia";
 import type { Marca } from "@/lib/tipos";
 
 type ItemLote = {
@@ -11,8 +11,8 @@ type ItemLote = {
   foto_base64?: string;
 };
 
-// Guarda muchas marcas de una sola vez (Nuria arrastra todas las fotos del
-// WhatsApp del dia y las suelta juntas).
+// Guarda muchas marcas de una sola vez (Nuria suelta todas las fotos del
+// WhatsApp del dia). Las repetidas (misma asesora, dia, tipo y hora) se omiten.
 export async function POST(req: NextRequest) {
   const body = await req.json();
   const items = (body?.items ?? []) as ItemLote[];
@@ -22,8 +22,32 @@ export async function POST(req: NextRequest) {
 
   const supabase = supabaseAdmin();
 
+  // Marcas ya guardadas para las asesoras/fechas del lote.
+  const asesoraIds = [...new Set(items.map((i) => i.asesora_id))];
+  const fechas = [...new Set(items.map((i) => i.fecha))];
+  const { data: existentes, error: errExistentes } = await supabase
+    .from("marcas")
+    .select("asesora_id, fecha, tipo, hora")
+    .in("asesora_id", asesoraIds)
+    .in("fecha", fechas);
+  if (errExistentes) return NextResponse.json({ error: errExistentes.message }, { status: 500 });
+
+  const vistas = new Set((existentes ?? []).map(claveMarca));
+  const nuevos: ItemLote[] = [];
+  for (const item of items) {
+    const clave = claveMarca(item);
+    if (vistas.has(clave)) continue;
+    vistas.add(clave);
+    nuevos.push(item);
+  }
+  const omitidas = items.length - nuevos.length;
+
+  if (nuevos.length === 0) {
+    return NextResponse.json({ guardadas: 0, omitidas, anomalias: [] });
+  }
+
   const filas = await Promise.all(
-    items.map(async (item) => {
+    nuevos.map(async (item) => {
       let foto_url: string | null = null;
       if (item.foto_base64) {
         const nombreArchivo = `${item.asesora_id}/${item.fecha}-${item.hora.replace(/:/g, "")}-${item.tipo}.jpg`;
@@ -49,7 +73,7 @@ export async function POST(req: NextRequest) {
   const { data: guardadas, error } = await supabase.from("marcas").insert(filas).select();
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
-  // Revisa anomalias inmediatas por cada asesora/fecha unica del lote.
+  // Revisa anomalias por cada asesora/fecha unica del lote.
   const claves = new Set(filas.map((f) => `${f.asesora_id}|${f.fecha}`));
   const anomalias: { asesora_id: string; nombre: string; mensaje: string }[] = [];
 
@@ -59,9 +83,13 @@ export async function POST(req: NextRequest) {
       supabase.from("marcas").select("*").eq("asesora_id", asesora_id).eq("fecha", fecha),
       supabase.from("asesoras").select("nombre").eq("id", asesora_id).single(),
     ]);
-    const anomalia = detectarAnomaliaInmediata((marcasDelDia ?? []) as Marca[], asesora?.nombre ?? "Una asesora");
+    const anomalia = detectarAnomaliaInmediata(
+      (marcasDelDia ?? []) as Marca[],
+      asesora?.nombre ?? "Una asesora",
+      fecha
+    );
     if (anomalia) anomalias.push({ asesora_id, nombre: asesora?.nombre ?? "", mensaje: anomalia.mensaje });
   }
 
-  return NextResponse.json({ guardadas: guardadas?.length ?? 0, anomalias });
+  return NextResponse.json({ guardadas: guardadas?.length ?? 0, omitidas, anomalias });
 }

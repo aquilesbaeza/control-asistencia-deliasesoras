@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { rangoMes } from "@/lib/asistencia";
+import { confirmarMes, mesConfirmado } from "@/lib/feriados";
 
 export async function GET(req: NextRequest) {
   const mes = req.nextUrl.searchParams.get("mes"); // YYYY-MM
@@ -14,10 +15,13 @@ export async function GET(req: NextRequest) {
 
   const { data, error } = await query;
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  return NextResponse.json({ feriados: data });
+
+  const confirmado = mes ? await mesConfirmado(supabase, mes) : null;
+  return NextResponse.json({ feriados: data, confirmado });
 }
 
-// Nuria define los feriados del mes de antemano (se trabajan de forma opcional).
+// Nuria define los feriados del mes (se trabajan de forma opcional). Agregar
+// uno tambien deja el mes como confirmado.
 export async function POST(req: NextRequest) {
   const body = await req.json();
   const { fecha, descripcion } = body as { fecha?: string; descripcion?: string };
@@ -31,6 +35,7 @@ export async function POST(req: NextRequest) {
     .single();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  await confirmarMes(supabase, fecha.slice(0, 7));
   return NextResponse.json({ feriado: data });
 }
 

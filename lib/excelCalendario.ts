@@ -73,7 +73,8 @@ export type FilaCalendario = {
 export async function generarExcelCalendario(
   anio: number,
   mesIndex0: number,
-  filas: FilaCalendario[]
+  filas: FilaCalendario[],
+  comentarios: string[] = []
 ): Promise<Buffer> {
   const workbook = new ExcelJS.Workbook();
   await workbook.xlsx.readFile(PLANTILLA);
@@ -146,6 +147,21 @@ export async function generarExcelCalendario(
     for (const cf of cfExistente) {
       cf.ref = `D4:AH${Math.max(ultimaFilaNueva, 31)}`;
     }
+  }
+
+  // Comentarios del mes: fuera de la cuadricula (a partir de la columna AO), una linea por comentario.
+  const COL_COMENTARIOS = 41; // AO
+  for (let r = 2; r <= Math.max(hoja.rowCount, 2 + comentarios.length); r++) {
+    hoja.getRow(r).getCell(COL_COMENTARIOS).value = null;
+  }
+  if (comentarios.length > 0) {
+    const encabezado = hoja.getRow(2).getCell(COL_COMENTARIOS);
+    encabezado.value = "COMENTARIOS";
+    encabezado.font = { bold: true, size: 11 };
+    comentarios.forEach((linea, i) => {
+      hoja.getRow(3 + i).getCell(COL_COMENTARIOS).value = linea;
+    });
+    hoja.getColumn(COL_COMENTARIOS).width = 95;
   }
 
   const buffer = await workbook.xlsx.writeBuffer();

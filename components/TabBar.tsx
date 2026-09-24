@@ -27,12 +27,9 @@ export default function TabBar({
         <div className="w-9 h-9 rounded-lg overflow-hidden flex-none shadow ring-2 ring-white/40 bg-[#3A3B3C]">
           <Image src="/icon-192.png" alt="Control" width={36} height={36} className="w-full h-full object-cover" />
         </div>
-        <div>
-          <div className="font-extrabold text-base leading-tight">Control</div>
-          <div className="text-[11px] text-teal-50/90">TRIXO · Deliasesoras</div>
-        </div>
-        <div className="ml-auto text-xs font-bold px-3 py-1.5 rounded-full bg-[#35DCEC] text-[#0B3A41]">
-          Nuria
+        <div className="min-w-0">
+          <div className="font-extrabold text-base leading-tight">Bienvenida, Nuria</div>
+          <div className="text-[11px] text-teal-50/90">Control · TRIXO Deliasesoras</div>
         </div>
       </div>
       <div className="flex gap-1.5 px-2.5 py-2 bg-[#E4F7F9] border-b border-[#CFF0F3] overflow-x-auto">

@@ -40,6 +40,15 @@ create table if not exists feriados (
   creado_en timestamptz not null default now()
 );
 
+-- Meses en los que Nuria ya indico sus feriados (o que no hay ninguno).
+create table if not exists feriados_confirmados (
+  mes text primary key,
+  creado_en timestamptz not null default now()
+);
+
+-- Horario de entrada por asesora (lo define Nuria).
+alter table asesoras add column if not exists hora_entrada time;
+
 -- Comentarios libres por semana (igual al formato en papel de Nuria: vacaciones,
 -- incapacidades, ausencias, renuncias, nuevo ingreso, feriados trabajados, etc.)
 create table if not exists notas_semanales (
@@ -60,3 +69,14 @@ insert into configuracion (id) values (1) on conflict (id) do nothing;
 
 -- Bucket de storage para respaldar las fotos originales (crear tambien desde
 -- Storage > New bucket > nombre "marcas-fotos" > Public: no).
+
+-- Comentarios estructurados: asunto + asesora + situacion.
+create table if not exists comentarios (
+  id uuid primary key default gen_random_uuid(),
+  fecha date not null,
+  asunto text not null,
+  asesora_id uuid references asesoras(id) on delete set null,
+  situacion text not null default '',
+  creado_en timestamptz not null default now()
+);
+create index if not exists comentarios_fecha_idx on comentarios (fecha);
