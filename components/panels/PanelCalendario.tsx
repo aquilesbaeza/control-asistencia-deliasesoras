@@ -1,7 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
-import SelectorMes, { mesActual } from "@/components/SelectorMes";
+import { useEffect, useMemo, useState } from "react";
 import FormPermisos from "@/components/FormPermisos";
 import PreguntaFeriados from "@/components/PreguntaFeriados";
 import Comentarios from "@/components/Comentarios";
@@ -23,13 +22,26 @@ const ESTILO: Record<EstatusDia, { etiqueta: string; letra: string; fondo: strin
   libre: { etiqueta: "Libre", letra: "L", fondo: "#E4F7F9", texto: "#0F7A8A" },
   vacaciones: { etiqueta: "Vacaciones", letra: "V", fondo: "#0B5F6C", texto: "#FFFFFF" },
   parcial: { etiqueta: "Falta una marca", letra: "!", fondo: "#35DCEC", texto: "#0B3A41" },
+  enJornada: { etiqueta: "En jornada", letra: "J", fondo: "#E4F7F9", texto: "#0B5F6C" },
   feriado: { etiqueta: "Feriado", letra: "F", fondo: "#DDE7E8", texto: "#3A3B3C" },
   pendiente: { etiqueta: "Sin datos aún", letra: "·", fondo: "#F2F8F9", texto: "#6B6D6E" },
   fuera: { etiqueta: "Aún no laboraba / ya no labora", letra: "–", fondo: "#FFFFFF", texto: "#9AA3A4" },
 };
 
-const LEYENDA: EstatusDia[] = ["asistencia", "ausencia", "libre", "vacaciones", "incapacidad", "parcial", "feriado"];
+const LEYENDA: EstatusDia[] = ["asistencia", "ausencia", "libre", "vacaciones", "incapacidad", "parcial", "enJornada", "feriado"];
 const MANUALES: EstatusDia[] = ["libre", "vacaciones", "incapacidad", "ausencia"];
+
+type Periodo = "dia" | "semana" | "mes";
+type Kpi = "ausencia" | "vacaciones" | "libre" | "incapacidad" | "faltaMarca" | "jornadaIncompleta";
+
+const KPIS: { id: Kpi; etiqueta: string; fondo: string; texto: string; borde?: string }[] = [
+  { id: "ausencia", etiqueta: "Ausencia", fondo: ESTILO.ausencia.fondo, texto: ESTILO.ausencia.texto },
+  { id: "vacaciones", etiqueta: "Vacaciones", fondo: ESTILO.vacaciones.fondo, texto: ESTILO.vacaciones.texto },
+  { id: "libre", etiqueta: "Libre", fondo: ESTILO.libre.fondo, texto: ESTILO.libre.texto },
+  { id: "incapacidad", etiqueta: "Incapacidad", fondo: ESTILO.incapacidad.fondo, texto: ESTILO.incapacidad.texto },
+  { id: "faltaMarca", etiqueta: "Falta marca (entrada o salida)", fondo: "#35DCEC", texto: "#0B3A41" },
+  { id: "jornadaIncompleta", etiqueta: "Jornada incompleta", fondo: "#FFFFFF", texto: "#0B3A41", borde: "#35DCEC" },
+];
 
 function normalizar(texto: string): string {
   return texto.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
@@ -40,9 +52,49 @@ function diasEnMes(mes: string): number {
   return new Date(anio, m, 0).getDate();
 }
 
+function sumarDias(iso: string, n: number): string {
+  const [a, m, d] = iso.split("-").map(Number);
+  return new Date(Date.UTC(a, m - 1, d + n)).toISOString().slice(0, 10);
+}
+
+function lunesDe(iso: string): string {
+  const [a, m, d] = iso.split("-").map(Number);
+  const dow = new Date(Date.UTC(a, m - 1, d)).getUTCDay();
+  return sumarDias(iso, dow === 0 ? -6 : 1 - dow);
+}
+
 function tituloDia(iso: string): string {
   const t = new Date(`${iso}T12:00:00`).toLocaleDateString("es-CR", { weekday: "long", day: "numeric", month: "long" });
   return t.charAt(0).toUpperCase() + t.slice(1);
+}
+
+function diaCorto(iso: string): string {
+  return new Date(`${iso}T12:00:00`).toLocaleDateString("es-CR", { weekday: "short", day: "numeric", month: "short" });
+}
+
+function rangoDePeriodo(periodo: Periodo, ref: string, mes: string, totalDias: number): { desde: string; hasta: string } {
+  const primero = `${mes}-01`;
+  const ultimo = `${mes}-${String(totalDias).padStart(2, "0")}`;
+  if (periodo === "dia") return { desde: ref, hasta: ref };
+  if (periodo === "mes") return { desde: primero, hasta: ultimo };
+  const lunes = lunesDe(ref);
+  const domingo = sumarDias(lunes, 6);
+  return { desde: lunes < primero ? primero : lunes, hasta: domingo > ultimo ? ultimo : domingo };
+}
+
+function cumple(kpi: Kpi, d: DiaCalculado, hoy: string): boolean {
+  switch (kpi) {
+    case "ausencia":
+    case "vacaciones":
+    case "libre":
+    case "incapacidad":
+      return d.estatus === kpi;
+    case "faltaMarca":
+      // Falta una de las dos marcas; hoy, ademas, quien aun no marca su entrada (unico aviso durante el dia).
+      return d.estatus === "parcial" || (d.estatus === "pendiente" && d.fecha === hoy && !d.entrada && !d.salida && !d.manual);
+    case "jornadaIncompleta":
+      return d.estatus === "asistencia" && d.horas !== null && d.horas < 8;
+  }
 }
 
 type FilaAsesora = { asesora: Asesora; dias: DiaCalculado[]; resumen: ResumenMes };
@@ -52,24 +104,28 @@ function describirDia(d: DiaCalculado): string {
   const partes: string[] = [];
   if (d.estatus === "asistencia") {
     partes.push(`Entrada ${d.entrada} · Salida ${d.salida}`);
-    if (d.horas !== null) partes.push(`${d.horas.toFixed(1)} h efectivas`);
+    if (d.horas !== null) partes.push(`${d.horas.toFixed(1)} h efectivas${d.horas < 8 ? " (jornada incompleta)" : ""}`);
     if (d.minutosTarde !== null) partes.push(`llegó ${d.minutosTarde} min tarde`);
   } else if (d.estatus === "parcial") {
-    partes.push(d.entrada ? `Solo hay entrada (${d.entrada}); falta la salida` : `Solo hay salida (${d.salida}); falta la entrada`);
-    partes.push("Puedes completarla en Capturar → marca manual");
+    partes.push(d.entrada ? `Pendiente la marca de salida (entrada ${d.entrada})` : `Pendiente la marca de entrada (salida ${d.salida})`);
+    partes.push("Puedes corregir las horas aquí mismo");
+  } else if (d.estatus === "enJornada") {
+    partes.push(`Ya marcó entrada (${d.entrada}); su jornada aún no termina`);
   } else if (d.estatus === "ausencia") {
     partes.push(d.manual ? "Ausencia registrada por Nuria" : "Sin marcas ese día");
   } else if (d.estatus === "feriado") {
     partes.push("Feriado sin marcas (se trabaja de forma opcional)");
   } else if (d.estatus === "pendiente") {
-    partes.push("Todavía no hay información para este día");
+    partes.push("Pendiente la marca de entrada, o todavía sin información");
   } else if (d.estatus === "fuera") {
     partes.push("La asesora aún no había ingresado o ya no laboraba este día");
   } else {
     partes.push(d.manual ? "Registrado por Nuria" : "");
   }
   if (d.entradaOriginal || d.salidaOriginal) {
-    partes.push(`Horas ajustadas por Nuria (foto: entrada ${d.entradaOriginal ?? d.entrada ?? "—"}, salida ${d.salidaOriginal ?? d.salida ?? "—"})${d.motivoCorreccion ? ` · ${d.motivoCorreccion}` : ""}`);
+    partes.push(
+      `Horas ajustadas por Nuria (foto: entrada ${d.entradaOriginal ?? d.entrada ?? "—"}, salida ${d.salidaOriginal ?? d.salida ?? "—"})${d.motivoCorreccion ? ` · ${d.motivoCorreccion}` : ""}`
+    );
   }
   if (d.marcasEnPermiso) {
     partes.push(`Ojo: tiene marcas ese día (entrada ${d.entrada ?? "—"}, salida ${d.salida ?? "—"}); ¿trabajó pese al permiso?`);
@@ -105,10 +161,7 @@ function DetalleDia({
         </button>
       </div>
       <div className="flex items-start gap-2">
-        <span
-          className="flex-none rounded-full px-2.5 py-1 text-[11.5px] font-bold"
-          style={{ background: estilo.fondo, color: estilo.texto }}
-        >
+        <span className="flex-none rounded-full px-2.5 py-1 text-[11.5px] font-bold" style={{ background: estilo.fondo, color: estilo.texto }}>
           {estilo.etiqueta}
         </span>
         <span className="text-[12px] leading-snug">{describirDia(dia)}</span>
@@ -163,24 +216,26 @@ function DetalleDia({
 }
 
 export default function PanelCalendario({ onVerDia }: { onVerDia?: (fecha: string) => void }) {
-  const [mes, setMes] = useState(mesActual());
+  const [referencia, setReferencia] = useState(() => ahoraCR().fecha);
+  const [periodo, setPeriodo] = useState<Periodo>("dia");
+  const [kpiActivo, setKpiActivo] = useState<Kpi | null>(null);
   const [asesoras, setAsesoras] = useState<Asesora[]>([]);
   const [marcas, setMarcas] = useState<Marca[]>([]);
   const [diasEspeciales, setDiasEspeciales] = useState<DiaEspecial[]>([]);
   const [feriados, setFeriados] = useState<Feriado[]>([]);
   const [feriadosConfirmados, setFeriadosConfirmados] = useState(false);
   const [cargando, setCargando] = useState(true);
-  const [vista, setVista] = useState<"asesora" | "cuadricula">("asesora");
   const [busqueda, setBusqueda] = useState("");
   const [abierta, setAbierta] = useState<string | null>(null);
+  const [permisoAbiertoId, setPermisoAbiertoId] = useState<string | null>(null);
   const [seleccion, setSeleccion] = useState<Seleccion>(null);
   const [refresco, setRefresco] = useState(0);
-  const [filtroRevisar, setFiltroRevisar] = useState<"todo" | "marca" | "corta">("todo");
-  const [verTodoRevisar, setVerTodoRevisar] = useState(false);
+  const [mostrarPermisos, setMostrarPermisos] = useState(false);
+  const [mostrarFeriados, setMostrarFeriados] = useState(false);
   const [nuevoFeriadoFecha, setNuevoFeriadoFecha] = useState("");
   const [nuevoFeriadoDesc, setNuevoFeriadoDesc] = useState("");
-  const contenedorRef = useRef<HTMLDivElement>(null);
-  const hoyRef = useRef<HTMLTableCellElement>(null);
+
+  const mes = referencia.slice(0, 7);
 
   async function cargar() {
     const [rAsesoras, rMarcas, rDias, rFeriados] = await Promise.all([
@@ -204,7 +259,8 @@ export default function PanelCalendario({ onVerDia }: { onVerDia?: (fecha: strin
   }, [mes]);
 
   const totalDias = diasEnMes(mes);
-  const hoy = ahoraCR().fecha;
+  const ahora = ahoraCR();
+  const hoy = ahora.fecha;
   const fechasFeriado = useMemo(() => new Set(feriados.map((f) => f.fecha)), [feriados]);
 
   const filas: FilaAsesora[] = useMemo(() => {
@@ -227,68 +283,60 @@ export default function PanelCalendario({ onVerDia }: { onVerDia?: (fecha: strin
           fechasFeriado,
           feriadosConfirmados,
           hoy,
+          ahoraMinutos: ahora.minutos,
           fechaIngreso: asesora.fecha_ingreso,
           fechaBaja: asesora.fecha_baja,
         });
         return { asesora, dias, resumen: resumirMes(dias) };
       });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [asesoras, marcas, diasEspeciales, mes, totalDias, fechasFeriado, feriadosConfirmados, hoy]);
 
-  const totales = useMemo(() => {
-    const t = { asistencia: 0, ausencia: 0, libre: 0, vacaciones: 0, incapacidad: 0, parcial: 0, cortas: 0 };
+  const rango = useMemo(() => rangoDePeriodo(periodo, referencia, mes, totalDias), [periodo, referencia, mes, totalDias]);
+
+  // Dias de cada asesora dentro del periodo elegido que cumplen cada condicion.
+  const coincidencias = useMemo(() => {
+    const porAsesora = new Map<string, Record<Kpi, DiaCalculado[]>>();
+    const vacio = (): Record<Kpi, DiaCalculado[]> => ({
+      ausencia: [], vacaciones: [], libre: [], incapacidad: [], faltaMarca: [], jornadaIncompleta: [],
+    });
     for (const f of filas) {
-      t.asistencia += f.resumen.asistencia;
-      t.ausencia += f.resumen.ausencia;
-      t.libre += f.resumen.libre;
-      t.vacaciones += f.resumen.vacaciones;
-      t.incapacidad += f.resumen.incapacidad;
-      t.parcial += f.resumen.parcial;
-      t.cortas += f.resumen.jornadasIncompletas;
+      const r = vacio();
+      for (const d of f.dias) {
+        if (d.fecha < rango.desde || d.fecha > rango.hasta) continue;
+        for (const k of KPIS) if (cumple(k.id, d, hoy)) r[k.id].push(d);
+      }
+      porAsesora.set(f.asesora.id, r);
+    }
+    return porAsesora;
+  }, [filas, rango, hoy]);
+
+  const totales = useMemo(() => {
+    const t = {} as Record<Kpi, { personas: number; dias: number }>;
+    for (const k of KPIS) {
+      let personas = 0;
+      let dias = 0;
+      for (const f of filas) {
+        const n = coincidencias.get(f.asesora.id)?.[k.id].length ?? 0;
+        if (n > 0) personas++;
+        dias += n;
+      }
+      t[k.id] = { personas, dias };
     }
     return t;
-  }, [filas]);
-
-  // Todo lo que conviene revisar del mes: una sola marca, o jornada con menos de 8 h efectivas.
-  const porRevisar = useMemo(() => {
-    const lista: { fecha: string; nombre: string; punto: string; tipo: "marca" | "corta"; detalle: string }[] = [];
-    for (const f of filas) {
-      for (const d of f.dias) {
-        if (d.fecha > hoy) continue;
-        if (d.estatus === "parcial") {
-          lista.push({
-            fecha: d.fecha,
-            nombre: f.asesora.nombre,
-            punto: f.asesora.punto,
-            tipo: "marca",
-            detalle: d.entrada ? `Pendiente la marca de salida (entrada ${d.entrada})` : `Pendiente la marca de entrada (salida ${d.salida})`,
-          });
-        } else if (d.estatus === "asistencia" && d.horas !== null && d.horas < 8) {
-          lista.push({
-            fecha: d.fecha,
-            nombre: f.asesora.nombre,
-            punto: f.asesora.punto,
-            tipo: "corta",
-            detalle: `Jornada de ${d.horas.toFixed(1)} h efectivas (${d.entrada} a ${d.salida})${d.entradaOriginal || d.salidaOriginal ? " · ya ajustada" : ""}`,
-          });
-        }
-      }
-    }
-    return lista.sort((a, b) => b.fecha.localeCompare(a.fecha) || a.nombre.localeCompare(b.nombre, "es"));
-  }, [filas, hoy]);
+  }, [filas, coincidencias]);
 
   const filasVisibles = useMemo(() => {
     const q = normalizar(busqueda.trim());
-    if (!q) return filas;
-    return filas.filter((f) => normalizar(f.asesora.nombre).includes(q) || normalizar(f.asesora.punto).includes(q));
-  }, [filas, busqueda]);
-
-  // En la cuadricula, centra el dia de hoy para que se vea de inmediato.
-  useEffect(() => {
-    if (vista !== "cuadricula" || cargando) return;
-    const cont = contenedorRef.current;
-    const th = hoyRef.current;
-    if (cont && th) cont.scrollLeft = Math.max(0, th.offsetLeft - cont.clientWidth / 2 + th.clientWidth / 2);
-  }, [vista, cargando, mes]);
+    let lista = filas.filter((f) => !q || normalizar(f.asesora.nombre).includes(q) || normalizar(f.asesora.punto).includes(q));
+    if (kpiActivo) {
+      lista = lista.filter((f) => (coincidencias.get(f.asesora.id)?.[kpiActivo].length ?? 0) > 0);
+      lista = [...lista].sort(
+        (a, b) => (coincidencias.get(b.asesora.id)?.[kpiActivo].length ?? 0) - (coincidencias.get(a.asesora.id)?.[kpiActivo].length ?? 0)
+      );
+    }
+    return lista;
+  }, [filas, busqueda, kpiActivo, coincidencias]);
 
   async function elegir(f: FilaAsesora, d: DiaCalculado, tipo: EstatusDia | "auto") {
     if (tipo === "auto") {
@@ -325,143 +373,166 @@ export default function PanelCalendario({ onVerDia }: { onVerDia?: (fecha: strin
   const diaSel = filaSel && seleccion ? filaSel.dias[seleccion.dia - 1] : undefined;
   const primerDiaSemana = (new Date(`${mes}-01T12:00:00`).getDay() + 6) % 7; // lunes = 0
 
-  const panelDetalle =
-    filaSel && diaSel ? (
-      <DetalleDia
-        fila={filaSel}
-        dia={diaSel}
-        onElegir={(t) => void elegir(filaSel, diaSel, t)}
-        onCorregido={() => {
-          void cargar();
-          setRefresco((v) => v + 1);
-        }}
-        onCerrar={() => setSeleccion(null)}
-      />
-    ) : null;
+  const etiquetaPeriodo =
+    periodo === "dia"
+      ? tituloDia(referencia)
+      : periodo === "semana"
+      ? `Semana del ${Number(rango.desde.split("-")[2])} al ${Number(rango.hasta.split("-")[2])} de ${new Date(`${rango.hasta}T12:00:00`).toLocaleDateString("es-CR", { month: "long" })}`
+      : new Date(`${mes}-01T12:00:00`).toLocaleDateString("es-CR", { month: "long", year: "numeric" });
 
   return (
     <div className="space-y-3">
-      <div className="flex items-center justify-between">
-        <span className="text-[10.5px] font-bold text-[#6B6D6E] uppercase tracking-wide">Mes</span>
-        <SelectorMes mes={mes} onCambiar={(m) => { setMes(m); setSeleccion(null); setAbierta(null); }} />
-      </div>
-
       <PreguntaFeriados key={mes} mes={mes} onCambio={() => void cargar()} />
+
+      {/* Periodo de los indicadores */}
+      <div className="space-y-2">
+        <div className="flex gap-1.5">
+          {(
+            [
+              ["dia", "Día"],
+              ["semana", "Semana"],
+              ["mes", "Mes"],
+            ] as [Periodo, string][]
+          ).map(([id, etiqueta]) => (
+            <button
+              key={id}
+              onClick={() => setPeriodo(id)}
+              className={`flex-1 rounded-lg py-2.5 text-[13px] font-semibold ${
+                periodo === id ? "bg-[#0B5F6C] text-white" : "bg-[#E4F7F9] text-[#0B5F6C]"
+              }`}
+            >
+              {etiqueta}
+            </button>
+          ))}
+        </div>
+        <div className="flex items-center gap-2">
+          <div className="flex-1 text-[12.5px] font-bold text-[#0B5F6C] capitalize">{etiquetaPeriodo}</div>
+          <input
+            type="date"
+            value={referencia}
+            onChange={(e) => {
+              if (e.target.value) {
+                setReferencia(e.target.value);
+                setSeleccion(null);
+                setAbierta(null);
+              }
+            }}
+            className="rounded-lg border border-[#DDE7E8] bg-white p-2 text-[12.5px]"
+          />
+          {referencia !== hoy && (
+            <button onClick={() => setReferencia(hoy)} className="rounded-lg bg-[#E4F7F9] text-[#0B5F6C] px-2.5 py-2 text-[12px] font-semibold">
+              Hoy
+            </button>
+          )}
+        </div>
+      </div>
 
       {cargando ? (
         <p className="text-sm text-[#6B6D6E]">Cargando…</p>
       ) : (
         <>
-          <div className="grid grid-cols-3 gap-2">
-            {(
-              [
-                ["asistencia", totales.asistencia],
-                ["ausencia", totales.ausencia],
-                ["libre", totales.libre],
-                ["vacaciones", totales.vacaciones],
-                ["incapacidad", totales.incapacidad],
-                ["parcial", totales.parcial],
-              ] as [EstatusDia, number][]
-            ).map(([k, n]) => (
-              <div key={k} className="rounded-xl p-2.5 text-center" style={{ background: ESTILO[k].fondo, color: ESTILO[k].texto }}>
-                <div className="font-extrabold text-lg leading-none">{n}</div>
-                <div className="text-[9.5px] uppercase tracking-wide mt-1">{k === "parcial" ? "Por completar" : ESTILO[k].etiqueta}</div>
-              </div>
-            ))}
+          {/* Indicadores: tocar uno resalta a las asesoras que cumplen la condicion */}
+          <div className="grid grid-cols-2 gap-2">
+            {KPIS.map((k) => {
+              const activo = kpiActivo === k.id;
+              const { personas, dias } = totales[k.id];
+              return (
+                <button
+                  key={k.id}
+                  onClick={() => setKpiActivo(activo ? null : k.id)}
+                  className="rounded-xl p-3 text-left"
+                  style={{
+                    background: k.fondo,
+                    color: k.texto,
+                    border: `2px solid ${activo ? "#0B5F6C" : k.borde ?? "transparent"}`,
+                    boxShadow: activo ? "0 0 0 3px #35DCEC" : "none",
+                  }}
+                >
+                  <div className="font-extrabold text-2xl leading-none">{personas}</div>
+                  <div className="text-[10.5px] font-bold uppercase tracking-wide mt-1 leading-tight">{k.etiqueta}</div>
+                  <div className="text-[10.5px] opacity-80 mt-0.5">
+                    {personas === 1 ? "persona" : "personas"}
+                    {periodo !== "dia" ? ` · ${dias} ${dias === 1 ? "día" : "días"}` : ""}
+                  </div>
+                </button>
+              );
+            })}
           </div>
-          <div className="rounded-xl p-2.5 text-center bg-[#35DCEC] text-[#0B3A41]">
-            <div className="font-extrabold text-lg leading-none">{totales.cortas}</div>
-            <div className="text-[9.5px] uppercase tracking-wide mt-1">Jornadas con menos de 8 h efectivas</div>
-          </div>
-          <p className="text-[11px] text-[#6B6D6E] -mt-1">
-            Suma de días de todas las asesoras en el mes. Toca una asesora (o un día) para ver el detalle.
+          <p className="text-[11px] text-[#6B6D6E] -mt-1 leading-snug">
+            {kpiActivo
+              ? "Mostrando solo a quienes cumplen esa condición. Toca de nuevo el indicador para ver a todas."
+              : "Toca un indicador para ver y resaltar a las asesoras que cumplen esa condición."}
           </p>
 
-          <div className="rounded-xl border-2 border-[#35DCEC] bg-white p-3 space-y-2">
-            <div className="text-[12.5px] font-bold text-[#0B5F6C]">Por revisar del mes · {porRevisar.length}</div>
-            <p className="text-[11px] text-[#6B6D6E] leading-snug">
-              Marcas incompletas (falta entrada o salida) y jornadas con menos de 8 horas. Toca &quot;Ver el día&quot; para revisarlas o corregir las horas, Nuria.
-            </p>
-            <div className="flex gap-1.5 flex-wrap">
-              {(
-                [
-                  ["todo", "Todo", porRevisar.length],
-                  ["marca", "Falta una marca", porRevisar.filter((x) => x.tipo === "marca").length],
-                  ["corta", "Jornada corta", porRevisar.filter((x) => x.tipo === "corta").length],
-                ] as ["todo" | "marca" | "corta", string, number][]
-              ).map(([id, etiqueta, n]) => (
-                <button
-                  key={id}
-                  onClick={() => setFiltroRevisar(id)}
-                  className={`rounded-full px-3 py-1.5 text-[12px] font-semibold ${
-                    filtroRevisar === id ? "bg-[#0B5F6C] text-white" : "bg-[#E4F7F9] text-[#0B5F6C]"
-                  }`}
-                >
-                  {etiqueta} · {n}
-                </button>
-              ))}
-            </div>
-            {(() => {
-              const visibles = porRevisar.filter((x) => filtroRevisar === "todo" || x.tipo === filtroRevisar);
-              const mostrados = verTodoRevisar ? visibles : visibles.slice(0, 12);
-              if (visibles.length === 0) return <p className="text-[12px] text-[#1E8A5F] font-semibold">¡Todo en orden por ahora!</p>;
-              return (
-                <>
-                  <ul className="space-y-1.5">
-                    {mostrados.map((x, i) => (
-                      <li key={`${x.fecha}-${x.nombre}-${i}`} className="flex items-center gap-2 rounded-lg bg-[#F2F8F9] px-2.5 py-2">
-                        <div className="flex-1 min-w-0">
-                          <div className="text-[12px] font-bold truncate">{x.nombre}</div>
-                          <div className="text-[11px] text-[#6B6D6E] leading-snug">
-                            {tituloDia(x.fecha)} · {x.detalle}
-                          </div>
-                        </div>
-                        {onVerDia && (
-                          <button
-                            onClick={() => onVerDia(x.fecha)}
-                            className="flex-none rounded-lg bg-[#0B5F6C] text-white px-2.5 py-1.5 text-[11.5px] font-semibold"
-                          >
-                            Ver el día
-                          </button>
-                        )}
-                      </li>
-                    ))}
-                  </ul>
-                  {visibles.length > 12 && (
-                    <button onClick={() => setVerTodoRevisar((v) => !v)} className="w-full text-[12px] font-semibold text-[#0F7A8A] py-1">
-                      {verTodoRevisar ? "Ver menos" : `Ver los ${visibles.length}`}
-                    </button>
-                  )}
-                </>
-              );
-            })()}
+          {/* Registro de permisos y feriados: a la vista */}
+          <div className="grid grid-cols-2 gap-2">
+            <button
+              onClick={() => setMostrarPermisos((v) => !v)}
+              className={`rounded-xl py-3 text-[12.5px] font-bold ${mostrarPermisos ? "bg-[#0B5F6C] text-white" : "bg-[#E4F7F9] text-[#0B5F6C]"}`}
+            >
+              + Libre, vacaciones o incapacidad
+            </button>
+            <button
+              onClick={() => setMostrarFeriados((v) => !v)}
+              className={`rounded-xl py-3 text-[12.5px] font-bold ${mostrarFeriados ? "bg-[#0B5F6C] text-white" : "bg-[#E4F7F9] text-[#0B5F6C]"}`}
+            >
+              + Feriados del mes
+            </button>
           </div>
 
-          <div className="flex gap-1.5">
-            {(
-              [
-                ["asesora", "Por asesora"],
-                ["cuadricula", "Cuadrícula del mes"],
-              ] as ["asesora" | "cuadricula", string][]
-            ).map(([id, etiqueta]) => (
-              <button
-                key={id}
-                onClick={() => setVista(id)}
-                className={`flex-1 rounded-lg py-2.5 text-[12.5px] font-semibold ${
-                  vista === id ? "bg-[#0B5F6C] text-white" : "bg-[#E4F7F9] text-[#0B5F6C]"
-                }`}
-              >
-                {etiqueta}
-              </button>
-            ))}
-          </div>
+          {mostrarPermisos && (
+            <FormPermisos
+              abiertoInicial
+              onCambio={() => {
+                void cargar();
+                setRefresco((v) => v + 1);
+              }}
+            />
+          )}
+
+          {mostrarFeriados && (
+            <div className="rounded-xl border border-[#DDE7E8] bg-white p-3 space-y-2">
+              <div className="text-[12.5px] font-bold text-[#0B5F6C]">Feriados de este mes</div>
+              <p className="text-[11px] text-[#6B6D6E] leading-snug">
+                Se trabajan de forma opcional: ese día solo se lista a quienes marcaron, y nadie cuenta como ausente.
+              </p>
+              {feriados.length === 0 && <p className="text-[11.5px] text-[#6B6D6E]">Sin feriados definidos este mes.</p>}
+              {feriados.map((f) => (
+                <div key={f.id} className="flex items-center justify-between text-[12px] bg-[#F2F8F9] rounded-lg px-2.5 py-2">
+                  <span>
+                    {Number(f.fecha.split("-")[2])} — {f.descripcion || "Feriado"}
+                  </span>
+                  <button onClick={() => quitarFeriado(f.fecha)} className="text-[#B23A3A] text-[11.5px] font-semibold">
+                    Quitar
+                  </button>
+                </div>
+              ))}
+              <div className="flex gap-2">
+                <input
+                  type="date"
+                  value={nuevoFeriadoFecha}
+                  onChange={(e) => setNuevoFeriadoFecha(e.target.value)}
+                  className="rounded-lg border border-[#DDE7E8] p-2 text-[12px] flex-1"
+                />
+                <input
+                  placeholder="Nombre (opcional)"
+                  value={nuevoFeriadoDesc}
+                  onChange={(e) => setNuevoFeriadoDesc(e.target.value)}
+                  className="rounded-lg border border-[#DDE7E8] p-2 text-[12px] flex-1"
+                />
+                <button onClick={agregarFeriado} className="rounded-lg bg-[#0B5F6C] text-white px-3.5 text-sm font-bold">
+                  +
+                </button>
+              </div>
+            </div>
+          )}
 
           <div className="flex flex-wrap gap-x-3 gap-y-1 text-[10.5px] text-[#3A3B3C]">
             {LEYENDA.map((k) => (
               <span key={k} className="flex items-center gap-1">
                 <span
                   className="inline-grid place-items-center w-4 h-4 rounded text-[9px] font-bold"
-                  style={{ background: ESTILO[k].fondo, color: ESTILO[k].texto }}
+                  style={{ background: ESTILO[k].fondo, color: ESTILO[k].texto, border: "1px solid #DDE7E8" }}
                 >
                   {ESTILO[k].letra}
                 </span>
@@ -470,39 +541,79 @@ export default function PanelCalendario({ onVerDia }: { onVerDia?: (fecha: strin
             ))}
           </div>
 
-          {vista === "asesora" && (
-            <div className="space-y-2">
-              <input
-                value={busqueda}
-                onChange={(e) => setBusqueda(e.target.value)}
-                placeholder="Buscar asesora o punto"
-                className="w-full rounded-lg border border-[#DDE7E8] bg-white p-2.5 text-[13px]"
-              />
-              {filasVisibles.map((f) => {
-                const r = f.resumen;
-                const expandida = abierta === f.asesora.id;
-                return (
-                  <div key={f.asesora.id} className="rounded-xl border border-[#DDE7E8] bg-white overflow-hidden">
-                    <button
-                      onClick={() => {
-                        setAbierta(expandida ? null : f.asesora.id);
-                        setSeleccion(null);
-                      }}
-                      className="w-full text-left p-3"
-                    >
-                      <div className="flex items-center gap-2">
-                        <div className="flex-1 min-w-0">
-                          <div className="text-[13px] font-bold truncate">
-                            {f.asesora.nombre}
-                            {!f.asesora.activo && <span className="ml-1.5 text-[10px] text-[#6B6D6E] font-semibold">(quitada)</span>}
-                          </div>
-                          <div className="text-[11px] text-[#6B6D6E] truncate">{f.asesora.punto}</div>
+          {/* Asesoras */}
+          <div className="space-y-2">
+            <input
+              value={busqueda}
+              onChange={(e) => setBusqueda(e.target.value)}
+              placeholder="Buscar asesora o punto"
+              className="w-full rounded-lg border border-[#DDE7E8] bg-white p-2.5 text-[13px]"
+            />
+            <div className="text-[10.5px] font-bold text-[#6B6D6E] uppercase tracking-wide">
+              {kpiActivo ? `${filasVisibles.length} asesora(s) · ${KPIS.find((k) => k.id === kpiActivo)?.etiqueta}` : `${filasVisibles.length} asesoras`}
+            </div>
+
+            {filasVisibles.map((f) => {
+              const r = f.resumen;
+              const expandida = abierta === f.asesora.id;
+              const coincide = kpiActivo ? coincidencias.get(f.asesora.id)?.[kpiActivo] ?? [] : [];
+              return (
+                <div
+                  key={f.asesora.id}
+                  className="rounded-xl overflow-hidden"
+                  style={{
+                    border: kpiActivo ? "2px solid #35DCEC" : "1px solid #DDE7E8",
+                    background: kpiActivo ? "#F3FDFE" : "#FFFFFF",
+                  }}
+                >
+                  <button
+                    onClick={() => {
+                      setAbierta(expandida ? null : f.asesora.id);
+                      setSeleccion(null);
+                      setPermisoAbiertoId(null);
+                    }}
+                    className="w-full text-left p-3"
+                  >
+                    <div className="flex items-center gap-2">
+                      <div className="flex-1 min-w-0">
+                        <div className="text-[13px] font-bold truncate">
+                          {f.asesora.nombre}
+                          {!f.asesora.activo && <span className="ml-1.5 text-[10px] text-[#6B6D6E] font-semibold">(quitada)</span>}
                         </div>
-                        <span className="text-[#0F7A8A] font-bold">{expandida ? "−" : "+"}</span>
                       </div>
+                      <span className="text-[#0F7A8A] font-bold">{expandida ? "−" : "+"}</span>
+                    </div>
+                  </button>
+
+                  {/* Detalle de lo que cumple el indicador elegido */}
+                  {kpiActivo && coincide.length > 0 && (
+                    <div className="px-3 pb-3 space-y-1.5">
+                      {coincide.slice(0, 5).map((d) => (
+                        <div key={d.fecha} className="flex items-center gap-2 rounded-lg bg-white border border-[#CFF0F3] px-2.5 py-1.5">
+                          <div className="flex-1 min-w-0 text-[11.5px] leading-snug">
+                            <b>{diaCorto(d.fecha)}</b> · {describirDia(d) || ESTILO[d.estatus].etiqueta}
+                          </div>
+                          {onVerDia && (
+                            <button
+                              onClick={() => onVerDia(d.fecha)}
+                              className="flex-none rounded-lg bg-[#0B5F6C] text-white px-2.5 py-1 text-[11px] font-semibold"
+                            >
+                              Ver el día
+                            </button>
+                          )}
+                        </div>
+                      ))}
+                      {coincide.length > 5 && <div className="text-[11px] text-[#6B6D6E]">y {coincide.length - 5} día(s) más — abre la tarjeta para verlos.</div>}
+                    </div>
+                  )}
+
+                  {expandida && (
+                    <div className="border-t border-[#DDE7E8] p-3 space-y-2.5 bg-[#F8FBFB]">
+                      <div className="text-[11.5px] text-[#6B6D6E]">{f.asesora.punto}</div>
                       <div className="flex flex-wrap gap-1.5 mt-2 text-[11px] font-semibold">
+                        <span className="text-[10px] text-[#6B6D6E] self-center">En el mes:</span>
                         <span className="rounded-full px-2 py-0.5" style={{ background: ESTILO.asistencia.fondo, color: "#fff" }}>
-                          {r.asistencia} asistencias
+                          {r.asistencia + r.parcial + r.enJornada} asistencias
                         </span>
                         {r.ausencia > 0 && (
                           <span className="rounded-full px-2 py-0.5" style={{ background: ESTILO.ausencia.fondo, color: ESTILO.ausencia.texto }}>
@@ -512,155 +623,85 @@ export default function PanelCalendario({ onVerDia }: { onVerDia?: (fecha: strin
                         {r.libre > 0 && <span className="rounded-full px-2 py-0.5 bg-[#E4F7F9] text-[#0F7A8A]">{r.libre} libres</span>}
                         {r.vacaciones > 0 && <span className="rounded-full px-2 py-0.5 bg-[#0B5F6C] text-white">{r.vacaciones} vacaciones</span>}
                         {r.incapacidad > 0 && <span className="rounded-full px-2 py-0.5 bg-[#CFF0F3] text-[#0B5F6C]">{r.incapacidad} incapacidad</span>}
-                        {r.parcial > 0 && <span className="rounded-full px-2 py-0.5 bg-[#35DCEC] text-[#0B3A41]">{r.parcial} marca(s) por completar</span>}
-                        {r.jornadasIncompletas > 0 && <span className="rounded-full px-2 py-0.5 bg-[#35DCEC] text-[#0B3A41]">{r.jornadasIncompletas} jornada(s) corta(s)</span>}
-                        {r.tardes > 0 && <span className="rounded-full px-2 py-0.5 bg-[#F2F8F9] text-[#3A3B3C]">{r.tardes} tardes</span>}
-                        {r.asistencia > 0 && (
-                          <span className="rounded-full px-2 py-0.5 bg-[#F2F8F9] text-[#3A3B3C]">{r.horasEfectivas.toFixed(0)} h efectivas</span>
+                        {r.parcial > 0 && <span className="rounded-full px-2 py-0.5 bg-[#35DCEC] text-[#0B3A41]">{r.parcial} falta(n) marca</span>}
+                        {r.jornadasIncompletas > 0 && (
+                          <span className="rounded-full px-2 py-0.5 bg-[#35DCEC] text-[#0B3A41]">{r.jornadasIncompletas} jornada(s) incompleta(s)</span>
                         )}
                       </div>
-                    </button>
-
-                    {expandida && (
-                      <div className="border-t border-[#DDE7E8] p-3 space-y-2.5 bg-[#F8FBFB]">
-                        <div className="grid grid-cols-7 gap-1 text-center text-[10px] font-bold text-[#6B6D6E]">
-                          {["L", "M", "K", "J", "V", "S", "D"].map((l, i) => (
-                            <div key={i}>{l}</div>
-                          ))}
-                        </div>
-                        <div className="grid grid-cols-7 gap-1">
-                          {Array.from({ length: primerDiaSemana }).map((_, i) => (
-                            <div key={`v${i}`} />
-                          ))}
-                          {f.dias.map((d) => {
-                            const e = ESTILO[d.estatus];
-                            const sel = seleccion?.asesoraId === f.asesora.id && seleccion.dia === d.dia;
-                            return (
-                              <button
-                                key={d.dia}
-                                onClick={() => setSeleccion(sel ? null : { asesoraId: f.asesora.id, dia: d.dia })}
-                                className="rounded-lg py-1.5 leading-tight"
-                                style={{
-                                  background: e.fondo,
-                                  color: e.texto,
-                                  outline: sel ? "2px solid #0B5F6C" : d.fecha === hoy ? "2px solid #35DCEC" : "none",
-                                  outlineOffset: 1,
-                                }}
-                              >
-                                <div className="text-[12px] font-bold">{d.dia}</div>
-                                <div className="text-[9px] font-bold opacity-80">{e.letra}</div>
-                              </button>
-                            );
-                          })}
-                        </div>
-                        {panelDetalle && seleccion?.asesoraId === f.asesora.id && panelDetalle}
+                      <div className="grid grid-cols-7 gap-1 text-center text-[10px] font-bold text-[#6B6D6E]">
+                        {["L", "M", "K", "J", "V", "S", "D"].map((l, i) => (
+                          <div key={i}>{l}</div>
+                        ))}
                       </div>
-                    )}
-                  </div>
-                );
-              })}
-              {filasVisibles.length === 0 && <p className="text-sm text-[#6B6D6E]">No encontré asesoras con esa búsqueda.</p>}
-            </div>
-          )}
-
-          {vista === "cuadricula" && (
-            <div className="space-y-2">
-              <div ref={contenedorRef} className="overflow-x-auto rounded-xl border border-[#DDE7E8] bg-white">
-                <table className="border-separate border-spacing-0 text-[11px]">
-                  <thead>
-                    <tr>
-                      <th className="sticky left-0 z-20 bg-white border-b border-r border-[#DDE7E8] p-2 text-left min-w-[150px] max-w-[150px]">
-                        Asesora
-                      </th>
-                      {Array.from({ length: totalDias }, (_, i) => i + 1).map((d) => {
-                        const fecha = `${mes}-${String(d).padStart(2, "0")}`;
-                        const esHoy = fecha === hoy;
-                        return (
-                          <th
-                            key={d}
-                            ref={esHoy ? hoyRef : undefined}
-                            className={`border-b border-[#DDE7E8] px-0.5 py-1.5 w-8 min-w-8 text-center ${
-                              esHoy ? "bg-[#35DCEC] text-[#0B3A41]" : fechasFeriado.has(fecha) ? "bg-[#DDE7E8]" : ""
-                            }`}
-                          >
-                            {d}
-                          </th>
-                        );
-                      })}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {filas.map((f) => (
-                      <tr key={f.asesora.id}>
-                        <td className="sticky left-0 z-10 bg-white border-b border-r border-[#DDE7E8] p-2 min-w-[150px] max-w-[150px]">
-                          <div className="font-semibold truncate">{f.asesora.nombre}</div>
-                          <div className="text-[9.5px] text-[#6B6D6E] truncate">{f.asesora.punto}</div>
-                        </td>
+                      <div className="grid grid-cols-7 gap-1">
+                        {Array.from({ length: primerDiaSemana }).map((_, i) => (
+                          <div key={`v${i}`} />
+                        ))}
                         {f.dias.map((d) => {
                           const e = ESTILO[d.estatus];
                           const sel = seleccion?.asesoraId === f.asesora.id && seleccion.dia === d.dia;
                           return (
-                            <td key={d.dia} className="border-b border-[#DDE7E8] p-0.5 text-center">
-                              <button
-                                onClick={() => setSeleccion(sel ? null : { asesoraId: f.asesora.id, dia: d.dia })}
-                                className="w-7 h-7 rounded font-bold text-[10px]"
-                                style={{
-                                  background: e.fondo,
-                                  color: e.texto,
-                                  outline: sel ? "2px solid #0B5F6C" : "none",
-                                }}
-                                aria-label={`${f.asesora.nombre}, día ${d.dia}: ${e.etiqueta}`}
-                              >
-                                {e.letra}
-                              </button>
-                            </td>
+                            <button
+                              key={d.dia}
+                              onClick={() => setSeleccion(sel ? null : { asesoraId: f.asesora.id, dia: d.dia })}
+                              className="rounded-lg py-1.5 leading-tight"
+                              style={{
+                                background: e.fondo,
+                                color: e.texto,
+                                outline: sel ? "2px solid #0B5F6C" : d.fecha === hoy ? "2px solid #35DCEC" : "none",
+                                outlineOffset: 1,
+                              }}
+                            >
+                              <div className="text-[12px] font-bold">{d.dia}</div>
+                              <div className="text-[9px] font-bold opacity-80">{e.letra}</div>
+                            </button>
                           );
                         })}
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-              {panelDetalle}
-              {!panelDetalle && <p className="text-[11.5px] text-[#6B6D6E]">Toca cualquier casilla para ver el detalle de ese día.</p>}
-            </div>
-          )}
+                      </div>
+
+                      {filaSel && diaSel && seleccion?.asesoraId === f.asesora.id && (
+                        <DetalleDia
+                          fila={filaSel}
+                          dia={diaSel}
+                          onElegir={(t) => void elegir(filaSel, diaSel, t)}
+                          onCorregido={() => {
+                            void cargar();
+                            setRefresco((v) => v + 1);
+                          }}
+                          onCerrar={() => setSeleccion(null)}
+                        />
+                      )}
+
+                      {permisoAbiertoId === f.asesora.id ? (
+                        <FormPermisos
+                          abiertoInicial
+                          asesoraInicial={f.asesora.id}
+                          onCambio={() => {
+                            void cargar();
+                            setRefresco((v) => v + 1);
+                          }}
+                        />
+                      ) : (
+                        <button
+                          onClick={() => setPermisoAbiertoId(f.asesora.id)}
+                          className="w-full rounded-lg bg-[#E4F7F9] text-[#0B5F6C] py-2.5 text-[12.5px] font-bold"
+                        >
+                          + Registrar libre, vacaciones o incapacidad para {f.asesora.nombre.split(" ")[0]}
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+            {filasVisibles.length === 0 && (
+              <p className="text-sm text-[#6B6D6E]">
+                {kpiActivo ? "Ninguna asesora cumple esa condición en este período." : "No encontré asesoras con esa búsqueda."}
+              </p>
+            )}
+          </div>
         </>
       )}
-
-      <FormPermisos colapsable onCambio={() => { void cargar(); setRefresco((v) => v + 1); }} />
-
-      <div className="rounded-xl border border-[#DDE7E8] bg-white p-3 space-y-2">
-        <div className="text-[12.5px] font-bold text-[#0B5F6C]">Feriados de este mes</div>
-        {feriados.length === 0 && <p className="text-[11.5px] text-[#6B6D6E]">Sin feriados definidos este mes.</p>}
-        {feriados.map((f) => (
-          <div key={f.id} className="flex items-center justify-between text-[12px] bg-[#F2F8F9] rounded-lg px-2.5 py-2">
-            <span>
-              {Number(f.fecha.split("-")[2])} — {f.descripcion || "Feriado"}
-            </span>
-            <button onClick={() => quitarFeriado(f.fecha)} className="text-[#B23A3A] text-[11.5px] font-semibold">
-              Quitar
-            </button>
-          </div>
-        ))}
-        <div className="flex gap-2">
-          <input
-            type="date"
-            value={nuevoFeriadoFecha}
-            onChange={(e) => setNuevoFeriadoFecha(e.target.value)}
-            className="rounded-lg border border-[#DDE7E8] p-2 text-[12px] flex-1"
-          />
-          <input
-            placeholder="Nombre (opcional)"
-            value={nuevoFeriadoDesc}
-            onChange={(e) => setNuevoFeriadoDesc(e.target.value)}
-            className="rounded-lg border border-[#DDE7E8] p-2 text-[12px] flex-1"
-          />
-          <button onClick={agregarFeriado} className="rounded-lg bg-[#0B5F6C] text-white px-3.5 text-sm font-bold">
-            +
-          </button>
-        </div>
-      </div>
 
       <Comentarios mes={mes} refresco={refresco} />
 

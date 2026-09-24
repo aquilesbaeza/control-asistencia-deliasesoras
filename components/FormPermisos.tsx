@@ -64,15 +64,19 @@ function agruparRangos(dias: DiaEspecial[]): Rango[] {
 
 export default function FormPermisos({
   colapsable = false,
+  abiertoInicial,
+  asesoraInicial,
   onCambio,
 }: {
   colapsable?: boolean;
+  abiertoInicial?: boolean;
+  asesoraInicial?: string; // asesora ya elegida (cuando se abre desde su tarjeta)
   onCambio?: () => void;
 }) {
-  const [abierto, setAbierto] = useState(!colapsable);
+  const [abierto, setAbierto] = useState(abiertoInicial ?? !colapsable);
   const [asesoras, setAsesoras] = useState<Asesora[]>([]);
   const [dias, setDias] = useState<DiaEspecial[]>([]);
-  const [asesoraId, setAsesoraId] = useState("");
+  const [asesoraId, setAsesoraId] = useState(asesoraInicial ?? "");
   const [tipo, setTipo] = useState<TipoPermiso>("vacaciones");
   const hoy = ahoraCR().fecha;
   const [desde, setDesde] = useState(hoy);

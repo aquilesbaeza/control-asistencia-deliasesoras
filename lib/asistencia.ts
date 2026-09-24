@@ -173,7 +173,8 @@ export type EstatusDia =
   | "incapacidad"
   | "libre"
   | "vacaciones"
-  | "parcial" // hay una sola marca: falta la otra
+  | "parcial" // hay una sola marca y la jornada ya termino (o falta la entrada): falta la otra
+  | "enJornada" // hoy, ya marco entrada y su jornada aun no termina: no es una anomalia
   | "feriado" // feriado sin marcas: opcional, no cuenta como ausencia
   | "pendiente" // hoy o futuro sin datos, o feriados del mes sin confirmar
   | "fuera"; // aun no habia ingresado o ya no laboraba ese dia
@@ -203,6 +204,7 @@ export function calcularMesAsesora(p: {
   fechasFeriado: Set<string>;
   feriadosConfirmados: boolean;
   hoy: string; // YYYY-MM-DD en hora de Costa Rica
+  ahoraMinutos?: number; // minutos desde medianoche (hora de Costa Rica); permite saber si la jornada de hoy ya termino
   fechaIngreso?: string | null; // antes de esta fecha no laboraba
   fechaBaja?: string | null; // despues de esta fecha ya no laboraba
 }): DiaCalculado[] {
@@ -228,6 +230,7 @@ export function calcularMesAsesora(p: {
     let estatus: EstatusDia;
     if (especial) estatus = especial.tipo as EstatusDia;
     else if (entrada && salida) estatus = "asistencia";
+    else if (entrada && !salida && fecha === p.hoy && p.ahoraMinutos !== undefined && !jornadaTerminada(fecha, entrada, { fecha: p.hoy, minutos: p.ahoraMinutos })) estatus = "enJornada";
     else if (entrada || salida) estatus = "parcial";
     else if ((p.fechaIngreso && fecha < p.fechaIngreso) || (p.fechaBaja && fecha > p.fechaBaja)) estatus = "fuera";
     else if (p.fechasFeriado.has(fecha)) estatus = "feriado";
@@ -263,7 +266,7 @@ export type ResumenMes = Record<EstatusDia, number> & {
 export function resumirMes(dias: DiaCalculado[]): ResumenMes {
   const r: ResumenMes = {
     asistencia: 0, ausencia: 0, incapacidad: 0, libre: 0, vacaciones: 0,
-    parcial: 0, feriado: 0, pendiente: 0, fuera: 0,
+    parcial: 0, enJornada: 0, feriado: 0, pendiente: 0, fuera: 0,
     tardes: 0, jornadasIncompletas: 0, horasEfectivas: 0,
   };
   for (const d of dias) {

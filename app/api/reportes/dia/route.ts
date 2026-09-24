@@ -8,7 +8,6 @@ import { ETIQUETA_ESTATUS, CODIGO_ESTATUS } from "@/lib/tipos";
 import type { Asesora, DiaEspecial, Marca } from "@/lib/tipos";
 
 const HORAS_JORNADA = 8;
-const TOLERANCIA_ENTRADA_MIN = 30;
 const TOLERANCIA_TARDE_MIN = 10;
 
 export async function GET(req: NextRequest) {
@@ -136,10 +135,9 @@ export async function GET(req: NextRequest) {
         estado = "warn";
       }
     } else if (fecha === ahora.fecha) {
-      if (esperada && ahora.minutos > horaAMinutos(esperada) + TOLERANCIA_ENTRADA_MIN) {
-        comentario = "Aún no registra su entrada";
-        estado = "warn";
-      }
+      // Durante el dia solo se comunica quien esta pendiente de marcar su entrada (nunca "ausente").
+      comentario = "Pendiente la marca de entrada";
+      estado = "warn";
     }
 
     filas.push({

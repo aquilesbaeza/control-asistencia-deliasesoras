@@ -68,6 +68,7 @@ export async function GET(req: NextRequest) {
   const CODIGOS: Record<string, number | undefined> = {
     asistencia: CODIGO_ESTATUS.asistencia,
     parcial: CODIGO_ESTATUS.asistencia,
+    enJornada: CODIGO_ESTATUS.asistencia,
     ausencia: CODIGO_ESTATUS.ausencia,
     incapacidad: CODIGO_ESTATUS.incapacidad,
     libre: CODIGO_ESTATUS.libre,
@@ -87,6 +88,7 @@ export async function GET(req: NextRequest) {
       fechasFeriado,
       feriadosConfirmados,
       hoy,
+      ahoraMinutos: ahoraCR().minutos,
       fechaIngreso: asesora.fecha_ingreso,
       fechaBaja: asesora.fecha_baja,
     });
