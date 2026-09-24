@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
-import { agruparPorDia, jornadaTerminada } from "@/lib/asistencia";
+import { agruparPorDia, jornadaTerminada, rangoConsecutivo, sumarDiasISO } from "@/lib/asistencia";
+import { paginar } from "@/lib/paginar";
 import { ahoraCR, horaAMinutos } from "@/lib/tiempo";
 import { mesConfirmado } from "@/lib/feriados";
 import { ETIQUETA_ESTATUS, CODIGO_ESTATUS } from "@/lib/tipos";
@@ -42,6 +43,28 @@ export async function GET(req: NextRequest) {
   const especialPorAsesora = new Map<string, DiaEspecial>();
   for (const d of (especiales ?? []) as DiaEspecial[]) especialPorAsesora.set(d.asesora_id, d);
 
+  // Para mostrar "del 10 al 16 (dia 3 de 7)" se traen los permisos cercanos de quienes hoy tienen uno.
+  const fechasPermisos = new Map<string, string[]>();
+  const idsConPermiso = [...especialPorAsesora.keys()];
+  if (idsConPermiso.length > 0) {
+    const { data: cercanos } = await paginar<DiaEspecial>((d, h) =>
+      supabase
+        .from("dias_especiales")
+        .select("*")
+        .in("asesora_id", idsConPermiso)
+        .gte("fecha", sumarDiasISO(fecha, -60))
+        .lte("fecha", sumarDiasISO(fecha, 60))
+        .order("fecha")
+        .order("id")
+        .range(d, h)
+    );
+    for (const x of cercanos) {
+      const clave = `${x.asesora_id}|${x.tipo}`;
+      fechasPermisos.set(clave, [...(fechasPermisos.get(clave) ?? []), x.fecha]);
+    }
+  }
+  const diaMes = (iso: string) => `${Number(iso.split("-")[2])}/${Number(iso.split("-")[1])}`;
+
   const filas = [];
 
   for (const asesora of (asesoras ?? []) as Asesora[]) {
@@ -52,6 +75,9 @@ export async function GET(req: NextRequest) {
 
     // Feriado: solo se listan quienes lo trabajaron (se trabaja de forma opcional).
     if (esFeriado && !tieneMarcas) continue;
+    // Quien aun no habia ingresado (o ya no laboraba) ese dia no se lista.
+    const fueraDeContrato = (asesora.fecha_ingreso && fecha < asesora.fecha_ingreso) || (asesora.fecha_baja && fecha > asesora.fecha_baja);
+    if (fueraDeContrato && !tieneMarcas) continue;
 
     const esperada = (asesora.hora_entrada ?? HORA_ENTRADA_POR_DEFECTO).slice(0, 5);
     let minutosTarde: number | null = null;
@@ -65,8 +91,15 @@ export async function GET(req: NextRequest) {
 
     if (especial) {
       // Lo que Nuria registra a mano manda: nunca se reporta como ausencia ni falta de marca.
+      const r = rangoConsecutivo(fechasPermisos.get(`${asesora.id}|${especial.tipo}`) ?? [fecha], fecha);
       comentario = ETIQUETA_ESTATUS[CODIGO_ESTATUS[especial.tipo]];
+      if (r.total > 1) comentario += ` · del ${diaMes(r.inicio)} al ${diaMes(r.fin)} (día ${r.posicion} de ${r.total})`;
+      if (especial.nota) comentario += ` · ${especial.nota}`;
       estado = "info";
+      if (tieneMarcas) {
+        comentario += " · Tiene marcas este día: ¿trabajó pese al permiso?";
+        estado = "warn";
+      }
     } else if (resumen?.entrada && resumen?.salida) {
       const horas = resumen.horasEfectivas ?? 0;
       if (horas < HORAS_JORNADA) {

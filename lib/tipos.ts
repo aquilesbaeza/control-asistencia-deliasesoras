@@ -4,6 +4,8 @@ export type Asesora = {
   punto: string;
   activo: boolean;
   hora_entrada?: string | null; // HH:MM:SS, horario que define Nuria
+  fecha_ingreso?: string | null; // primer dia laborado
+  fecha_baja?: string | null; // ultimo dia laborado
   creado_en: string;
 };
 

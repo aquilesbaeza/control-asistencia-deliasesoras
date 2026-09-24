@@ -30,6 +30,10 @@ function restarDias(iso: string, dias: number): string {
   return new Date(Date.UTC(a, m - 1, d - dias)).toISOString().slice(0, 10);
 }
 
+function diasEntre(desde: string, hasta: string): number {
+  return Math.round((Date.parse(hasta) - Date.parse(desde)) / 86400000) + 1;
+}
+
 function formatoCorto(iso: string): string {
   return new Date(`${iso}T00:00:00`).toLocaleDateString("es-CR", { day: "numeric", month: "short" });
 }
@@ -81,7 +85,7 @@ export default function FormPermisos({
   const cargar = useCallback(async () => {
     const [rA, rD] = await Promise.all([
       fetch("/api/asesoras").then((r) => r.json()),
-      fetch(`/api/dias-especiales?desde=${restarDias(ahoraCR().fecha, 7)}`).then((r) => r.json()),
+      fetch(`/api/dias-especiales?desde=${restarDias(ahoraCR().fecha, 35)}`).then((r) => r.json()),
     ]);
     setAsesoras((rA.asesoras ?? []).filter((a: Asesora) => a.activo));
     setDias(rD.dias ?? []);
@@ -214,6 +218,11 @@ export default function FormPermisos({
               />
             </label>
           </div>
+          <p className="text-[12px] font-semibold text-[#0B5F6C]">
+            {desde && hasta && hasta >= desde
+              ? `Serán ${diasEntre(desde, hasta)} ${diasEntre(desde, hasta) === 1 ? "día" : "días"} (del ${formatoCorto(desde)} al ${formatoCorto(hasta)})`
+              : "Revisa las fechas, por favor."}
+          </p>
 
           <input
             value={nota}
@@ -238,7 +247,7 @@ export default function FormPermisos({
           {rangos.length > 0 && (
             <div className="pt-2 border-t border-[#DDE7E8] space-y-1.5">
               <div className="text-[10.5px] font-bold text-[#6B6D6E] uppercase tracking-wide">
-                Registrados (últimos 7 días en adelante)
+                Registrados (último mes y próximos)
               </div>
               {rangos.map((r) => (
                 <div
@@ -250,6 +259,7 @@ export default function FormPermisos({
                     <div className="text-[11px] text-[#6B6D6E]">
                       {TIPOS.find((t) => t.id === r.tipo)?.etiqueta} ·{" "}
                       {r.desde === r.hasta ? formatoCorto(r.desde) : `${formatoCorto(r.desde)} – ${formatoCorto(r.hasta)}`}
+                      {` (${diasEntre(r.desde, r.hasta)} ${diasEntre(r.desde, r.hasta) === 1 ? "día" : "días"})`}
                       {r.nota ? ` · ${r.nota}` : ""}
                     </div>
                   </div>

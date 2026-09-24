@@ -15,6 +15,7 @@ export default function PanelAsesoras() {
   const [nombreNuevo, setNombreNuevo] = useState("");
   const [puntoNuevo, setPuntoNuevo] = useState("");
   const [horaNueva, setHoraNueva] = useState("");
+  const [ingresoNuevo, setIngresoNuevo] = useState("");
   const [agregarAbierto, setAgregarAbierto] = useState(false);
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -22,6 +23,7 @@ export default function PanelAsesoras() {
   const [editandoId, setEditandoId] = useState<string | null>(null);
   const [puntoEdicion, setPuntoEdicion] = useState("");
   const [horaEdicion, setHoraEdicion] = useState("");
+  const [ingresoEdicion, setIngresoEdicion] = useState("");
 
   async function cargar() {
     const resp = await fetch("/api/asesoras");
@@ -63,16 +65,17 @@ export default function PanelAsesoras() {
       });
       const data = await resp.json();
       if (!resp.ok) throw new Error(data.error);
-      if (horaNueva) {
+      if (horaNueva || ingresoNuevo) {
         await fetch(`/api/asesoras/${data.asesora.id}`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ hora_entrada: horaNueva }),
+          body: JSON.stringify({ hora_entrada: horaNueva || null, fecha_ingreso: ingresoNuevo || null }),
         });
       }
       setNombreNuevo("");
       setPuntoNuevo("");
       setHoraNueva("");
+      setIngresoNuevo("");
       setAgregarAbierto(false);
       setAviso("Asesora agregada.");
       await cargar();
@@ -85,10 +88,15 @@ export default function PanelAsesoras() {
 
   async function guardarEdicion(id: string) {
     if (!puntoEdicion.trim()) return;
+    // Solo se envia lo que cambio.
+    const original = asesoras.find((a) => a.id === id);
+    const cambios: Record<string, string | null> = { punto: puntoEdicion };
+    if ((horaEdicion || null) !== (original?.hora_entrada?.slice(0, 5) ?? null)) cambios.hora_entrada = horaEdicion || null;
+    if ((ingresoEdicion || null) !== (original?.fecha_ingreso ?? null)) cambios.fecha_ingreso = ingresoEdicion || null;
     const resp = await fetch(`/api/asesoras/${id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ punto: puntoEdicion, hora_entrada: horaEdicion || null }),
+      body: JSON.stringify(cambios),
     });
     if (!resp.ok) {
       const data = await resp.json();
@@ -182,6 +190,15 @@ export default function PanelAsesoras() {
               className="mt-1 block w-full rounded-lg border border-[#DDE7E8] p-2.5 text-[13px] font-normal text-[#14181A]"
             />
           </label>
+          <label className="block text-[10.5px] font-bold text-[#6B6D6E] uppercase tracking-wide">
+            Fecha de ingreso (opcional)
+            <input
+              type="date"
+              value={ingresoNuevo}
+              onChange={(e) => setIngresoNuevo(e.target.value)}
+              className="mt-1 block w-full rounded-lg border border-[#DDE7E8] p-2.5 text-[13px] font-normal text-[#14181A]"
+            />
+          </label>
           <button
             onClick={agregar}
             disabled={guardando}
@@ -224,6 +241,15 @@ export default function PanelAsesoras() {
                         className="mt-0.5 w-full rounded border border-[#DDE7E8] p-2 text-[13px] font-normal text-[#14181A]"
                       />
                     </label>
+                    <label className="block text-[10px] font-bold text-[#6B6D6E] uppercase tracking-wide">
+                      Fecha de ingreso (si es nueva)
+                      <input
+                        type="date"
+                        value={ingresoEdicion}
+                        onChange={(e) => setIngresoEdicion(e.target.value)}
+                        className="mt-0.5 w-full rounded border border-[#DDE7E8] p-2 text-[13px] font-normal text-[#14181A]"
+                      />
+                    </label>
                     <div className="flex gap-2">
                       <button
                         onClick={() => guardarEdicion(a.id)}
@@ -244,6 +270,7 @@ export default function PanelAsesoras() {
                     <div className="text-[11.5px] text-[#6B6D6E]">
                       {a.punto}
                       {a.hora_entrada ? ` · Entrada ${a.hora_entrada.slice(0, 5)}` : ""}
+                      {a.fecha_ingreso ? ` · Ingreso ${Number(a.fecha_ingreso.split("-")[2])}/${Number(a.fecha_ingreso.split("-")[1])}` : ""}
                     </div>
                     <div className="flex gap-2 mt-2">
                       <button
@@ -251,6 +278,7 @@ export default function PanelAsesoras() {
                           setEditandoId(a.id);
                           setPuntoEdicion(a.punto);
                           setHoraEdicion(a.hora_entrada?.slice(0, 5) ?? "");
+                          setIngresoEdicion(a.fecha_ingreso ?? "");
                           setError(null);
                           setAviso(null);
                         }}

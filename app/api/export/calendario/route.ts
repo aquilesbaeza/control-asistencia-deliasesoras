@@ -63,9 +63,11 @@ export async function GET(req: NextRequest) {
     especialesPorAsesora.set(dia.asesora_id, lista);
   }
 
-  // Solo Asistencia y Ausencia las completa el sistema; Libre, Vacaciones e Incapacidad vienen de lo que Nuria registro.
+  // El sistema completa Asistencia y Ausencia; Libre, Vacaciones e Incapacidad vienen de lo que Nuria registro.
+  // Una marca incompleta cuenta como Asistencia (si estuvo); el error queda reportado en la bitacora.
   const CODIGOS: Record<string, number | undefined> = {
     asistencia: CODIGO_ESTATUS.asistencia,
+    parcial: CODIGO_ESTATUS.asistencia,
     ausencia: CODIGO_ESTATUS.ausencia,
     incapacidad: CODIGO_ESTATUS.incapacidad,
     libre: CODIGO_ESTATUS.libre,
@@ -85,6 +87,8 @@ export async function GET(req: NextRequest) {
       fechasFeriado,
       feriadosConfirmados,
       hoy,
+      fechaIngreso: asesora.fecha_ingreso,
+      fechaBaja: asesora.fecha_baja,
     });
 
     const dias: Record<number, number | undefined> = {};

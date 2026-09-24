@@ -24,6 +24,7 @@ const ESTILO: Record<EstatusDia, { etiqueta: string; letra: string; fondo: strin
   parcial: { etiqueta: "Falta una marca", letra: "!", fondo: "#35DCEC", texto: "#0B3A41" },
   feriado: { etiqueta: "Feriado", letra: "F", fondo: "#DDE7E8", texto: "#3A3B3C" },
   pendiente: { etiqueta: "Sin datos aún", letra: "·", fondo: "#F2F8F9", texto: "#6B6D6E" },
+  fuera: { etiqueta: "Aún no laboraba / ya no labora", letra: "–", fondo: "#FFFFFF", texto: "#9AA3A4" },
 };
 
 const LEYENDA: EstatusDia[] = ["asistencia", "ausencia", "libre", "vacaciones", "incapacidad", "parcial", "feriado"];
@@ -61,8 +62,13 @@ function describirDia(d: DiaCalculado): string {
     partes.push("Feriado sin marcas (se trabaja de forma opcional)");
   } else if (d.estatus === "pendiente") {
     partes.push("Todavía no hay información para este día");
+  } else if (d.estatus === "fuera") {
+    partes.push("La asesora aún no había ingresado o ya no laboraba este día");
   } else {
     partes.push(d.manual ? "Registrado por Nuria" : "");
+  }
+  if (d.marcasEnPermiso) {
+    partes.push(`Ojo: tiene marcas ese día (entrada ${d.entrada ?? "—"}, salida ${d.salida ?? "—"}); ¿trabajó pese al permiso?`);
   }
   if (d.nota) partes.push(`Nota: ${d.nota}`);
   return partes.filter(Boolean).join(" · ");
@@ -188,6 +194,8 @@ export default function PanelCalendario() {
           fechasFeriado,
           feriadosConfirmados,
           hoy,
+          fechaIngreso: asesora.fecha_ingreso,
+          fechaBaja: asesora.fecha_baja,
         });
         return { asesora, dias, resumen: resumirMes(dias) };
       });

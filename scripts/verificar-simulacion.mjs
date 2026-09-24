@@ -2,18 +2,19 @@
 import ExcelJS from "exceljs";
 import { readFileSync } from "node:fs";
 
-const esperado = JSON.parse(readFileSync("simulacion/esperado.json", "utf8"));
+const { hoy, esperado } = JSON.parse(readFileSync("simulacion/esperado.json", "utf8"));
+console.log("Simulacion sembrada con hoy =", hoy);
 
 const wb = new ExcelJS.Workbook();
-await wb.xlsx.readFile("simulacion/Asistencia Noviembre 2025.xlsx");
-const hoja = wb.getWorksheet("Noviembre 2025");
-if (!hoja) throw new Error("No existe la hoja 'Noviembre 2025'");
+await wb.xlsx.readFile("simulacion/Asistencia Setiembre 2026.xlsx");
+const hoja = wb.getWorksheet("Setiembre 2026");
+if (!hoja) throw new Error("No existe la hoja Setiembre 2026");
 
 console.log("== EXCEL DE ASISTENCIA ==");
 const letras = [];
 for (let d = 1; d <= 31; d++) letras.push(String(hoja.getRow(3).getCell(3 + d).value ?? "-"));
-console.log("Fila de letras de dias (1..31):", letras.join(""), "(el 1/nov/2025 fue sabado -> debe empezar con S)");
-console.log("Dia 31 (no existe en noviembre) vacio:", hoja.getRow(2).getCell(34).value === null);
+console.log("Fila de letras de dias (1..31):", letras.join(""), "(el 1/sep/2026 es martes -> debe empezar con K)");
+console.log("Dia 31 (no existe en setiembre) vacio:", hoja.getRow(2).getCell(34).value === null);
 
 let filas = 0, celdas = 0, difs = 0;
 const ultimaFilaDatos = hoja.rowCount;
@@ -45,7 +46,7 @@ console.log("Comentarios escritos fuera de la cuadricula (col AO):", comentarios
 
 console.log("\n== EXCEL DE BITACORA ==");
 const wb2 = new ExcelJS.Workbook();
-await wb2.xlsx.readFile("simulacion/Bitacora 2025-11.xlsx");
+await wb2.xlsx.readFile("simulacion/Bitacora 2026-09.xlsx");
 console.log("Hojas:", wb2.worksheets.map((w) => w.name).join(", "));
 const b = wb2.worksheets[0];
 let dias = 0, conComentario = 0;

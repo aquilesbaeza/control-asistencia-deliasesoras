@@ -176,13 +176,15 @@ export type EstatusDia =
   | "vacaciones"
   | "parcial" // hay una sola marca: falta la otra
   | "feriado" // feriado sin marcas: opcional, no cuenta como ausencia
-  | "pendiente"; // hoy o futuro sin datos, o feriados del mes sin confirmar
+  | "pendiente" // hoy o futuro sin datos, o feriados del mes sin confirmar
+  | "fuera"; // aun no habia ingresado o ya no laboraba ese dia
 
 export type DiaCalculado = {
   dia: number;
   fecha: string;
   estatus: EstatusDia;
   manual: boolean; // lo registro Nuria a mano (libre/vacaciones/incapacidad/ausencia)
+  marcasEnPermiso: boolean; // tiene un permiso registrado pero igual hay marcas ese dia
   nota: string | null;
   entrada: string | null; // HH:MM
   salida: string | null; // HH:MM
@@ -199,6 +201,8 @@ export function calcularMesAsesora(p: {
   fechasFeriado: Set<string>;
   feriadosConfirmados: boolean;
   hoy: string; // YYYY-MM-DD en hora de Costa Rica
+  fechaIngreso?: string | null; // antes de esta fecha no laboraba
+  fechaBaja?: string | null; // despues de esta fecha ya no laboraba
 }): DiaCalculado[] {
   const porDia = agruparPorDia(p.marcas);
   const especialPorFecha = new Map(p.especiales.map((e) => [e.fecha, e]));
@@ -222,6 +226,7 @@ export function calcularMesAsesora(p: {
     if (especial) estatus = especial.tipo as EstatusDia;
     else if (entrada && salida) estatus = "asistencia";
     else if (entrada || salida) estatus = "parcial";
+    else if ((p.fechaIngreso && fecha < p.fechaIngreso) || (p.fechaBaja && fecha > p.fechaBaja)) estatus = "fuera";
     else if (p.fechasFeriado.has(fecha)) estatus = "feriado";
     else if (fecha >= p.hoy) estatus = "pendiente";
     else if (!p.feriadosConfirmados) estatus = "pendiente";
@@ -232,6 +237,7 @@ export function calcularMesAsesora(p: {
       fecha,
       estatus,
       manual: !!especial,
+      marcasEnPermiso: !!especial && !!(entrada || salida),
       nota: especial?.nota ?? null,
       entrada,
       salida,
@@ -251,7 +257,7 @@ export type ResumenMes = Record<EstatusDia, number> & {
 export function resumirMes(dias: DiaCalculado[]): ResumenMes {
   const r: ResumenMes = {
     asistencia: 0, ausencia: 0, incapacidad: 0, libre: 0, vacaciones: 0,
-    parcial: 0, feriado: 0, pendiente: 0,
+    parcial: 0, feriado: 0, pendiente: 0, fuera: 0,
     tardes: 0, jornadasIncompletas: 0, horasEfectivas: 0,
   };
   for (const d of dias) {
@@ -263,4 +269,29 @@ export function resumirMes(dias: DiaCalculado[]): ResumenMes {
     }
   }
   return r;
+}
+
+function sumarDiasISO(iso: string, n: number): string {
+  const [a, m, d] = iso.split("-").map(Number);
+  return new Date(Date.UTC(a, m - 1, d + n)).toISOString().slice(0, 10);
+}
+export { sumarDiasISO };
+
+/**
+ * Rango de dias consecutivos que contiene `fecha` dentro de un conjunto de fechas
+ * (ej. vacaciones del 10 al 16 -> en el 12: inicio 10, fin 16, dia 3 de 7).
+ */
+export function rangoConsecutivo(
+  fechas: string[],
+  fecha: string
+): { inicio: string; fin: string; posicion: number; total: number } {
+  const conjunto = new Set(fechas);
+  conjunto.add(fecha);
+  let inicio = fecha;
+  while (conjunto.has(sumarDiasISO(inicio, -1))) inicio = sumarDiasISO(inicio, -1);
+  let fin = fecha;
+  while (conjunto.has(sumarDiasISO(fin, 1))) fin = sumarDiasISO(fin, 1);
+  const total = Math.round((Date.parse(fin) - Date.parse(inicio)) / 86400000) + 1;
+  const posicion = Math.round((Date.parse(fecha) - Date.parse(inicio)) / 86400000) + 1;
+  return { inicio, fin, posicion, total };
 }
