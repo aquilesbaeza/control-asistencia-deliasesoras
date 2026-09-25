@@ -10,18 +10,30 @@ function diaTexto(iso: string): string {
   return t.charAt(0).toUpperCase() + t.slice(1);
 }
 
-/** Comentarios del mes de UNA asesora (asunto + dia + situacion), debajo de su calendario. */
+export type FilaDetalle = {
+  fecha: string;
+  fin: string | null; // ultimo dia si abarca varios (permisos seguidos)
+  texto: string;
+  color: string;
+  estatus: string;
+};
+
+/** Detalle del mes de UNA asesora: lo que paso cada dia mas sus comentarios (asunto + dia + situacion), debajo de su calendario. */
 export default function ComentariosAsesora({
   asesoraId,
   mes,
   fechaInicial,
   comentarios,
+  filas,
+  filtrado,
   onCambio,
 }: {
   asesoraId: string;
   mes: string; // YYYY-MM
   fechaInicial: string; // dia con que se abre el formulario
   comentarios: Comentario[];
+  filas: FilaDetalle[]; // situacion de cada dia
+  filtrado: boolean; // con un filtro elegido solo se listan los dias que cumplen
   onCambio: () => void;
 }) {
   const [abierto, setAbierto] = useState(false);
@@ -61,14 +73,23 @@ export default function ComentariosAsesora({
     onCambio();
   }
 
+  type Item = { clave: string; fecha: string; fin: string | null; texto: string; color: string | null; comentario?: Comentario };
+  const base: Item[] = [
+    ...filas.map((r) => ({ clave: `d${r.fecha}`, fecha: r.fecha, fin: r.fin, texto: r.texto, color: r.color })),
+    ...(filtrado ? [] : comentarios.map((c) => ({ clave: c.id, fecha: c.fecha, fin: null, texto: c.situacion, color: null, comentario: c }))),
+  ];
+  const items = [...base].sort((a, b) => a.fecha.localeCompare(b.fecha) || (a.comentario ? 1 : 0) - (b.comentario ? 1 : 0));
+
+  const cuando = (i: Item) => (i.fin && i.fin !== i.fecha ? `${Number(i.fecha.slice(8))}–${Number(i.fin.slice(8))}` : diaTexto(i.fecha));
+
   return (
     <div className="rounded-xl border border-[#DDE7E8] bg-white p-2.5 space-y-2">
       <div className="flex items-center gap-2">
         <div className="flex-1 text-[12px] font-bold text-[#0B5F6C]">
-          Comentarios del mes{comentarios.length > 0 && <span className="text-[#6B6D6E] font-semibold"> · {comentarios.length}</span>}
+          Detalle del mes{comentarios.length > 0 && <span className="text-[#6B6D6E] font-semibold"> · {comentarios.length} comentario(s)</span>}
         </div>
         <button onClick={() => setAbierto((v) => !v)} className="rounded-lg bg-[#E4F7F9] text-[#0B5F6C] px-2.5 py-1 text-[11.5px] font-bold">
-          {abierto ? "Cerrar" : "+ Agregar"}
+          {abierto ? "Cerrar" : "+ Comentario"}
         </button>
       </div>
 
@@ -108,20 +129,25 @@ export default function ComentariosAsesora({
         </div>
       )}
 
-      {comentarios.length === 0 ? (
-        <p className="text-[11.5px] text-[#6B6D6E]">Sin comentarios este mes.</p>
+      {items.length === 0 ? (
+        <p className="text-[11.5px] text-[#6B6D6E]">{filtrado ? "Ningún día cumple ese filtro." : "Todavía no hay nada que mostrar este mes."}</p>
       ) : (
-        <ul className="space-y-1.5">
-          {comentarios.map((c) => (
-            <li key={c.id} className="flex items-start gap-2 rounded-lg bg-[#F2F8F9] px-2.5 py-1.5 text-[12px] leading-snug">
+        <ul className="space-y-1 max-h-72 overflow-y-auto pr-0.5">
+          {items.map((i) => (
+            <li key={i.clave} className="flex items-start gap-2 rounded-lg bg-[#F2F8F9] px-2.5 py-1.5 text-[12px] leading-snug">
+              <span className="flex-none w-[4.5rem] font-bold text-[#0F7A8A] tabular-nums">{cuando(i)}</span>
               <span className="flex-1 min-w-0">
-                <b className="text-[#0F7A8A]">{diaTexto(c.fecha)}</b>{" "}
-                <span className="inline-block rounded-full bg-[#CFF0F3] text-[#0B5F6C] px-2 py-0.5 text-[10px] font-bold mr-1">{c.asunto}</span>
-                {c.situacion}
+                {i.color && <span className="inline-block w-2.5 h-2.5 rounded-sm mr-1.5 align-middle" style={{ background: i.color }} />}
+                {i.comentario && (
+                  <span className="inline-block rounded-full bg-[#CFF0F3] text-[#0B5F6C] px-2 py-0.5 text-[10px] font-bold mr-1">{i.comentario.asunto}</span>
+                )}
+                {i.texto}
               </span>
-              <button onClick={() => quitar(c.id)} className="text-[#B23A3A] text-[11px] font-semibold flex-none">
-                Quitar
-              </button>
+              {i.comentario && (
+                <button onClick={() => quitar(i.comentario!.id)} className="text-[#B23A3A] text-[11px] font-semibold flex-none">
+                  Quitar
+                </button>
+              )}
             </li>
           ))}
         </ul>

@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import PlanificarMes from "@/components/PlanificarMes";
 import PreguntaFeriados from "@/components/PreguntaFeriados";
-import ComentariosAsesora from "@/components/ComentariosAsesora";
+import ComentariosAsesora, { type FilaDetalle } from "@/components/ComentariosAsesora";
 import CorregirHoras from "@/components/CorregirHoras";
 import { AsesorasQuitadas, FormMoverAsesora, NuevaAsesora, quitarAsesora } from "@/components/AsesoraAcciones";
 import {
@@ -16,6 +16,7 @@ import {
 } from "@/lib/asistencia";
 import { ahoraCR, aSetiembre } from "@/lib/tiempo";
 import type { Asesora, Comentario, DiaEspecial, Feriado, Marca } from "@/lib/tipos";
+import { IconoComentario, IconoLapiz } from "@/components/Iconos";
 
 const ESTILO: Record<EstatusDia, { etiqueta: string; letra: string; fondo: string; texto: string }> = {
   asistencia: { etiqueta: "Asistencia", letra: "A", fondo: "#1EA6B8", texto: "#FFFFFF" },
@@ -454,6 +455,34 @@ export default function PanelPrincipal({ recargar = 0, arriba, onMes }: { recarg
     return `del ${diaMes(r.inicio)} al ${diaMes(r.fin)} (día ${r.posicion} de ${r.total})${regreso}`;
   }
 
+  // Lo que pasó cada día del mes con esta asesora (para el detalle bajo su calendario). Los permisos seguidos van en una sola fila.
+  function filasDetalle(f: FilaAsesora, filtro: FiltroDia | null): FilaDetalle[] {
+    const filas: FilaDetalle[] = [];
+    let previa: FilaDetalle | null = null;
+    for (const d of f.dias) {
+      if (filtro && !cumpleFiltro(filtro, d, hoy)) {
+        previa = null;
+        continue;
+      }
+      const esPermiso = d.estatus === "libre" || d.estatus === "vacaciones" || d.estatus === "incapacidad";
+      if (esPermiso && previa && previa.estatus === d.estatus && previa.fin && sumarDias(previa.fin, 1) === d.fecha) {
+        previa.fin = d.fecha;
+        continue;
+      }
+      const { texto } = textoDia(f, d);
+      const c = colorDelDia(d);
+      if (!texto || !c) {
+        previa = null;
+        continue;
+      }
+      // Los permisos muestran su rango completo; se quita el "(día n de m)" porque la fila ya abarca varios días.
+      const limpio = esPermiso ? texto.replace(/ \(día \d+ de \d+\)/, "") : texto;
+      previa = { fecha: d.fecha, fin: d.fecha, texto: limpio, color: c.punto, estatus: d.estatus };
+      filas.push(previa);
+    }
+    return filas;
+  }
+
   async function agregarFeriado() {
     if (!nuevoFeriadoFecha) return;
     await fetch("/api/feriados", {
@@ -607,7 +636,7 @@ export default function PanelPrincipal({ recargar = 0, arriba, onMes }: { recarg
             <div className="mt-2 space-y-2">
               <p className="text-[11px] text-[#6B6D6E] leading-snug">
                 Se trabajan de forma opcional: ese día solo se lista a quienes marcaron, y nadie cuenta como ausente. Los libres, vacaciones e
-                incapacidades se anotan en cada asesora (ícono 🗓️).
+                incapacidades se anotan en cada asesora (botón «Editar calendario»).
               </p>
               {feriados.length === 0 && <p className="text-[11.5px] text-[#6B6D6E]">Sin feriados definidos este mes.</p>}
               {feriados.map((fe) => (
@@ -688,8 +717,8 @@ export default function PanelPrincipal({ recargar = 0, arriba, onMes }: { recarg
                         {f.asesora.nombre}
                         {!f.asesora.activo && <span className="ml-1.5 text-[10px] text-[#6B6D6E] font-semibold">(quitada)</span>}
                         {comentarios.some((c) => c.asesora_id === f.asesora.id) && (
-                          <span className="ml-1.5 text-[10px] text-[#0F7A8A] font-bold" title="Tiene comentarios este mes">
-                            💬 {comentarios.filter((c) => c.asesora_id === f.asesora.id).length}
+                          <span className="ml-1.5 inline-flex items-center gap-0.5 text-[10px] text-[#0F7A8A] font-bold align-middle" title="Tiene comentarios este mes">
+                            <IconoComentario size={12} /> {comentarios.filter((c) => c.asesora_id === f.asesora.id).length}
                           </span>
                         )}
                       </div>
@@ -782,7 +811,7 @@ export default function PanelPrincipal({ recargar = 0, arriba, onMes }: { recarg
                             className="flex-none flex items-center gap-1 rounded-lg border border-[#1EA6B8] bg-white text-[#0B5F6C] px-2.5 py-1.5 text-[11.5px] font-bold"
                             aria-label={`Editar libres, vacaciones e incapacidades de ${f.asesora.nombre} en el calendario`}
                           >
-                            <span aria-hidden>✏️</span> Editar calendario
+                            <IconoLapiz size={14} /> Editar calendario
                           </button>
                         )}
                       </div>
@@ -824,46 +853,57 @@ export default function PanelPrincipal({ recargar = 0, arriba, onMes }: { recarg
                         />
                       ) : (
                         <>
-                      <div className="grid grid-cols-7 gap-1 text-center text-[10px] font-bold text-[#6B6D6E]">
-                        {["L", "M", "X", "J", "V", "S", "D"].map((l, i) => (
-                          <div key={i}>{l}</div>
-                        ))}
-                      </div>
-                      <div className="grid grid-cols-7 gap-1">
-                        {Array.from({ length: primerDiaSemana }).map((_, i) => (
-                          <div key={`v${i}`} />
-                        ))}
-                        {f.dias.map((d) => {
-                          const c = colorDelDia(d);
-                          const sel = seleccion?.asesoraId === f.asesora.id && seleccion.dia === d.dia;
-                          const esHoy = d.fecha === hoy;
-                          // Con un filtro elegido, sus dias quedan a todo color y el resto se apaga.
-                          const apagado = !!filtroEfectivo && !cumpleFiltro(filtroEfectivo, d, hoy);
-                          const aro = "0 0 0 2px #FFFFFF, 0 0 0 4px ";
-                          return (
-                            <button
-                              key={d.dia}
-                              onClick={() => setSeleccion(sel ? null : { asesoraId: f.asesora.id, dia: d.dia })}
-                              className="h-11 rounded-[10px] flex flex-col items-center justify-center leading-none transition-opacity"
-                              style={{
-                                background: c ? c.punto : "#F2F8F9",
-                                color: c ? c.texto : "#9AA3A4",
-                                opacity: apagado ? 0.22 : 1,
-                                boxShadow: sel
-                                  ? aro + "#0B3A41"
-                                  : filtroEfectivo && !apagado
-                                  ? aro + (c?.punto ?? "#0B5F6C")
-                                  : esHoy
-                                  ? "inset 0 0 0 2.5px #0B3A41"
-                                  : "none",
-                              }}
-                              aria-label={`Día ${d.dia}${esHoy ? " (hoy)" : ""}: ${ESTILO[d.estatus].etiqueta}`}
-                            >
-                              <span className="text-[13px] font-extrabold">{d.dia}</span>
-                              {esHoy && <span className="text-[8px] font-bold mt-0.5 tracking-wide">HOY</span>}
-                            </button>
-                          );
-                        })}
+                      <div className="rounded-2xl overflow-hidden border border-[#E5E5EA] bg-white shadow-sm">
+                        <div className="flex items-center justify-between px-3 py-2.5 border-b border-[#E5E5EA]">
+                          <button onClick={() => mover(-1)} className="px-2 text-[18px] text-[#0F7A8A]" aria-label="Mes anterior">
+                            ‹
+                          </button>
+                          <h3 className="text-[14px] font-semibold text-[#1C1C1E] capitalize">{etiquetaPeriodo}</h3>
+                          <button onClick={() => mover(1)} className="px-2 text-[18px] text-[#0F7A8A]" aria-label="Mes siguiente">
+                            ›
+                          </button>
+                        </div>
+                        <div className="grid grid-cols-7 bg-[#F9F9FB] border-b border-[#E5E5EA] text-center">
+                          {["L", "M", "X", "J", "V", "S", "D"].map((l, i) => (
+                            <div key={i} className="py-2 text-[11px] font-semibold text-[#8E8E93]">
+                              {l}
+                            </div>
+                          ))}
+                        </div>
+                        <div className="grid grid-cols-7 gap-px bg-[#E5E5EA]">
+                          {Array.from({ length: primerDiaSemana }).map((_, i) => (
+                            <div key={`v${i}`} className="aspect-square bg-[#FAFAFA]" />
+                          ))}
+                          {f.dias.map((d) => {
+                            const c = colorDelDia(d);
+                            const sel = seleccion?.asesoraId === f.asesora.id && seleccion.dia === d.dia;
+                            const esHoy = d.fecha === hoy;
+                            // Con un filtro elegido, sus dias se rellenan de color y el resto se apaga.
+                            const resaltado = !!filtroEfectivo && cumpleFiltro(filtroEfectivo, d, hoy);
+                            const apagado = !!filtroEfectivo && !resaltado;
+                            return (
+                              <button
+                                key={d.dia}
+                                onClick={() => setSeleccion(sel ? null : { asesoraId: f.asesora.id, dia: d.dia })}
+                                className="aspect-square relative flex flex-col items-center justify-center transition-opacity"
+                                style={{
+                                  background: resaltado && c ? c.punto : c ? `${c.punto}26` : "#FFFFFF",
+                                  color: resaltado && c ? c.texto : esHoy ? "#0B5F6C" : "#1C1C1E",
+                                  opacity: apagado ? 0.3 : 1,
+                                  boxShadow: sel ? "inset 0 0 0 2.5px #0B3A41" : esHoy ? "inset 0 0 0 2px #1EA6B8" : "none",
+                                }}
+                                aria-label={`Día ${d.dia}${esHoy ? " (hoy)" : ""}: ${ESTILO[d.estatus].etiqueta}`}
+                              >
+                                <span className={`text-[14px] ${esHoy || resaltado ? "font-extrabold" : "font-semibold"}`}>{d.dia}</span>
+                                {esHoy && <span className="text-[7.5px] font-bold tracking-wide leading-none">HOY</span>}
+                                {c && !resaltado && <span className="absolute inset-x-0 bottom-0 h-1" style={{ background: c.punto }} />}
+                              </button>
+                            );
+                          })}
+                          {Array.from({ length: (7 - ((primerDiaSemana + f.dias.length) % 7)) % 7 }).map((_, i) => (
+                            <div key={`f${i}`} className="aspect-square bg-[#FAFAFA]" />
+                          ))}
+                        </div>
                       </div>
 
                       {filaSel && diaSel && seleccion?.asesoraId === f.asesora.id && (
@@ -883,6 +923,8 @@ export default function PanelPrincipal({ recargar = 0, arriba, onMes }: { recarg
                         mes={mes}
                         fechaInicial={mes === hoy.slice(0, 7) ? hoy : `${mes}-01`}
                         comentarios={comentarios.filter((c) => c.asesora_id === f.asesora.id)}
+                        filas={filasDetalle(f, filtroEfectivo)}
+                        filtrado={!!filtroEfectivo}
                         onCambio={recargarTodo}
                       />
 

@@ -1,6 +1,7 @@
 "use client";
 
 import Image from "next/image";
+import { IconoCalendario, IconoReloj } from "@/components/Iconos";
 
 export default function Encabezado({ mes }: { mes: string }) {
   return (
@@ -21,17 +22,17 @@ export default function Encabezado({ mes }: { mes: string }) {
           href={`/api/export/calendario?mes=${mes}`}
           title="Exportar asistencia (Excel)"
           aria-label="Exportar Excel de asistencia"
-          className="flex-none w-9 h-9 grid place-items-center rounded-lg bg-white/20 ring-1 ring-white/40 text-base"
+          className="flex-none w-9 h-9 grid place-items-center rounded-lg bg-white/20 ring-1 ring-white/40 text-white"
         >
-          📅
+          <IconoCalendario />
         </a>
         <a
           href={`/api/export/bitacora?mes=${mes}`}
           title="Exportar marcas (Excel)"
           aria-label="Exportar Excel de marcas"
-          className="flex-none w-9 h-9 grid place-items-center rounded-lg bg-white/20 ring-1 ring-white/40 text-base"
+          className="flex-none w-9 h-9 grid place-items-center rounded-lg bg-white/20 ring-1 ring-white/40 text-white"
         >
-          🕒
+          <IconoReloj />
         </a>
       </div>
     </header>

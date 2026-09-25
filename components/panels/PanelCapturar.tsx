@@ -5,6 +5,7 @@ import PopupAnomalia from "@/components/PopupAnomalia";
 import VisorMarca, { type ItemCaptura } from "@/components/VisorMarca";
 import { claveMarca } from "@/lib/asistencia";
 import { ahoraCR } from "@/lib/tiempo";
+import { IconoCamara, IconoLapiz } from "@/components/Iconos";
 
 type Asesora = { id: string; nombre: string; punto: string };
 type Candidato = Asesora & { score: number };
@@ -342,7 +343,7 @@ export default function PanelCapturar({ onGuardado }: { onGuardado?: () => void 
             arrastrando ? "bg-[#CFF0F3] border-[#0F7A8A]" : "bg-[#E4F7F9] border-[#1EA6B8]"
           }`}
         >
-          <span aria-hidden className="text-lg leading-none">📷</span>
+          <IconoCamara size={22} />
           Subir fotos de marcas
           <input
             ref={inputRef}
@@ -364,7 +365,7 @@ export default function PanelCapturar({ onGuardado }: { onGuardado?: () => void 
             manualAbierto ? "bg-[#0B5F6C] border-[#0B5F6C] text-white" : "bg-white border-[#1EA6B8] text-[#0B5F6C]"
           }`}
         >
-          ✏️
+          <IconoLapiz size={22} />
         </button>
       </div>
 

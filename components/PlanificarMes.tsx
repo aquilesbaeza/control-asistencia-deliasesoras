@@ -2,6 +2,7 @@
 
 import { useMemo, useRef, useState } from "react";
 import type { DiaEspecial } from "@/lib/tipos";
+import { IconoDocumento, IconoLapiz } from "@/components/Iconos";
 
 type Tipo = "libre" | "vacaciones" | "incapacidad";
 
@@ -222,7 +223,7 @@ export default function PlanificarMes({
     <div className="rounded-xl border-2 border-[#1EA6B8] bg-white p-3 space-y-2.5">
       <div className="flex items-start gap-2">
         <div className="flex-1 min-w-0">
-          <div className="text-[13px] font-extrabold text-[#0B5F6C]">✏️ Editando el calendario</div>
+          <div className="text-[13px] font-extrabold text-[#0B5F6C] flex items-center gap-1.5"><IconoLapiz size={15} /> Editando el calendario</div>
           <div className="text-[11.5px] text-[#6B6D6E]">Elige libre, vacaciones o incapacidad y toca los días de {nombre.split(" ")[0]}</div>
         </div>
         <button onClick={onCerrar} className="text-[12px] text-[#6B6D6E] font-semibold px-1">
@@ -311,9 +312,9 @@ export default function PlanificarMes({
           <button
             onClick={() => inputFoto.current?.click()}
             disabled={leyendo}
-            className="w-full rounded-lg border-2 border-dashed border-[#1EA6B8] bg-white py-2.5 text-[12.5px] font-bold text-[#0B5F6C] disabled:opacity-60"
+            className="w-full flex items-center justify-center gap-2 rounded-lg border-2 border-dashed border-[#1EA6B8] bg-white py-2.5 text-[12.5px] font-bold text-[#0B5F6C] disabled:opacity-60"
           >
-            {leyendo ? "Leyendo el comprobante…" : "📄 Subir foto del comprobante"}
+            {leyendo ? "Leyendo el comprobante…" : <><IconoDocumento size={17} /> Subir foto del comprobante</>}
           </button>
           <input
             ref={inputFoto}
