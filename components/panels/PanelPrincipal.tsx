@@ -73,6 +73,23 @@ const LEYENDA: [string, string][] = [
 type Periodo = "dia" | "semana" | "mes";
 type Kpi = "ausencia" | "faltaMarca" | "jornadaIncompleta" | "incapacidad" | "vacaciones" | "libre";
 type Tono = "ok" | "warn" | "info";
+type FiltroDia = Kpi | "asistencia";
+
+/** Si el dia cumple el filtro (los indicadores de arriba mas "asistencia", que solo existe en cada tarjeta). */
+function cumpleFiltro(filtro: FiltroDia, d: DiaCalculado, hoy: string): boolean {
+  return filtro === "asistencia" ? d.estatus === "asistencia" || d.estatus === "enJornada" : cumple(filtro, d, hoy);
+}
+
+// Botones-filtro del resumen de cada asesora, en este orden.
+const FILTROS_TARJETA: { id: FiltroDia; etiqueta: string }[] = [
+  { id: "asistencia", etiqueta: "asistencias" },
+  { id: "ausencia", etiqueta: "ausencias" },
+  { id: "libre", etiqueta: "libres" },
+  { id: "vacaciones", etiqueta: "vacaciones" },
+  { id: "incapacidad", etiqueta: "incapacidad" },
+  { id: "faltaMarca", etiqueta: "falta marca" },
+  { id: "jornadaIncompleta", etiqueta: "jornada incompleta" },
+];
 
 const KPIS: { id: Kpi; etiqueta: string; fondo: string; texto: string; borde?: string }[] = [
   { id: "ausencia", etiqueta: "Ausencia", fondo: ESTILO.ausencia.fondo, texto: ESTILO.ausencia.texto },
@@ -240,6 +257,8 @@ export default function PanelPrincipal({ recargar = 0, arriba, onMes }: { recarg
   // Solo se ve el mes: los indicadores cuentan todo el mes y cada asesora muestra su estado de hoy.
   const periodo = "mes" as Periodo;
   const [kpiActivo, setKpiActivo] = useState<Kpi | null>(null);
+  // Filtro propio de cada tarjeta (botones del resumen); si no hay, manda el indicador de arriba.
+  const [filtroTarjeta, setFiltroTarjeta] = useState<Record<string, FiltroDia | null>>({});
   const [asesoras, setAsesoras] = useState<Asesora[]>([]);
   const [marcas, setMarcas] = useState<Marca[]>([]);
   const [diasEspeciales, setDiasEspeciales] = useState<DiaEspecial[]>([]);
@@ -549,7 +568,10 @@ export default function PanelPrincipal({ recargar = 0, arriba, onMes }: { recarg
               return (
                 <button
                   key={k.id}
-                  onClick={() => setKpiActivo(activo ? null : k.id)}
+                  onClick={() => {
+                    setKpiActivo(activo ? null : k.id);
+                    setFiltroTarjeta({});
+                  }}
                   className="rounded-xl p-2.5 text-left"
                   style={{
                     background: k.fondo,
@@ -560,7 +582,7 @@ export default function PanelPrincipal({ recargar = 0, arriba, onMes }: { recarg
                 >
                   <div className="font-extrabold text-2xl leading-none">{personas}</div>
                   <div className="text-[10.5px] font-bold uppercase tracking-wide mt-1 leading-tight">
-                    <span className="inline-block w-2 h-2 rounded-full mr-1 align-middle" style={{ background: COLOR[k.id].punto, boxShadow: "0 0 0 1.5px #FFFFFF" }} />
+                    <span className="inline-block w-2.5 h-2.5 rounded-sm mr-1 align-middle" style={{ background: COLOR[k.id].punto, boxShadow: "0 0 0 1.5px #FFFFFF" }} />
                     {k.etiqueta}
                   </div>
                   <div className="text-[10.5px] opacity-80 mt-0.5">
@@ -621,7 +643,7 @@ export default function PanelPrincipal({ recargar = 0, arriba, onMes }: { recarg
           <div className="flex flex-wrap gap-x-3 gap-y-1 text-[10.5px] text-[#3A3B3C]">
             {LEYENDA.map(([k, etiqueta]) => (
               <span key={k} className="flex items-center gap-1">
-                <span className="inline-block w-2 h-2 rounded-full" style={{ background: COLOR[k].punto }} />
+                <span className="inline-block w-2.5 h-2.5 rounded-sm" style={{ background: COLOR[k].punto }} />
                 {etiqueta}
               </span>
             ))}
@@ -646,9 +668,9 @@ export default function PanelPrincipal({ recargar = 0, arriba, onMes }: { recarg
             {mostrarNueva && <NuevaAsesora onCambio={recargarTodo} onCerrar={() => setMostrarNueva(false)} onAviso={setAviso} />}
 
             {filasVisibles.map((f) => {
-              const r = f.resumen;
               const expandida = abierta === f.asesora.id;
               const coincide = kpiActivo ? coincidencias.get(f.asesora.id)?.[kpiActivo] ?? [] : [];
+              const filtroEfectivo: FiltroDia | null = f.asesora.id in filtroTarjeta ? filtroTarjeta[f.asesora.id] : kpiActivo;
               const dDia = mes === hoy.slice(0, 7) ? f.dias[idxDia] : undefined;
               const info = dDia ? textoDia(f, dDia) : null;
               return (
@@ -764,23 +786,29 @@ export default function PanelPrincipal({ recargar = 0, arriba, onMes }: { recarg
                           </button>
                         )}
                       </div>
-                      <div className="flex flex-wrap gap-1.5 text-[11px] font-semibold">
-                        <span className="text-[10px] text-[#6B6D6E] self-center">En el mes:</span>
-                        <span className="rounded-full px-2 py-0.5" style={{ background: ESTILO.asistencia.fondo, color: "#fff" }}>
-                          {r.asistencia + r.parcial + r.enJornada} asistencias
-                        </span>
-                        {r.ausencia > 0 && (
-                          <span className="rounded-full px-2 py-0.5" style={{ background: ESTILO.ausencia.fondo, color: ESTILO.ausencia.texto }}>
-                            {r.ausencia} ausencias
-                          </span>
-                        )}
-                        {r.libre > 0 && <span className="rounded-full px-2 py-0.5 bg-[#E4F7F9] text-[#0F7A8A]">{r.libre} libres</span>}
-                        {r.vacaciones > 0 && <span className="rounded-full px-2 py-0.5 bg-[#0B5F6C] text-white">{r.vacaciones} vacaciones</span>}
-                        {r.incapacidad > 0 && <span className="rounded-full px-2 py-0.5 bg-[#CFF0F3] text-[#0B5F6C]">{r.incapacidad} incapacidad</span>}
-                        {r.parcial > 0 && <span className="rounded-full px-2 py-0.5 bg-[#35DCEC] text-[#0B3A41]">{r.parcial} falta(n) marca</span>}
-                        {r.jornadasIncompletas > 0 && (
-                          <span className="rounded-full px-2 py-0.5 bg-[#35DCEC] text-[#0B3A41]">{r.jornadasIncompletas} jornada(s) incompleta(s)</span>
-                        )}
+                      <div className="flex flex-wrap gap-1.5 text-[11px] font-bold">
+                        {FILTROS_TARJETA.map((fl) => {
+                          const n = f.dias.filter((d) => cumpleFiltro(fl.id, d, hoy)).length;
+                          if (n === 0 && fl.id !== "asistencia") return null;
+                          const activo = filtroEfectivo === fl.id;
+                          const col = COLOR[fl.id];
+                          return (
+                            <button
+                              key={fl.id}
+                              onClick={() => setFiltroTarjeta((m) => ({ ...m, [f.asesora.id]: activo ? null : fl.id }))}
+                              aria-pressed={activo}
+                              className="flex items-center gap-1.5 rounded-lg px-2 py-1"
+                              style={{
+                                background: activo ? col.punto : "#FFFFFF",
+                                color: activo ? col.texto : "#3A3B3C",
+                                border: `2px solid ${activo ? col.punto : "#DDE7E8"}`,
+                              }}
+                            >
+                              <span className="inline-block w-2.5 h-2.5 rounded-sm" style={{ background: col.punto, boxShadow: activo ? "0 0 0 1.5px #FFFFFF" : "none" }} />
+                              {n} {fl.etiqueta}
+                            </button>
+                          );
+                        })}
                       </div>
 
                       {permisoAbiertoId === f.asesora.id ? (
@@ -796,12 +824,12 @@ export default function PanelPrincipal({ recargar = 0, arriba, onMes }: { recarg
                         />
                       ) : (
                         <>
-                      <div className="grid grid-cols-7 text-center text-[10px] font-bold text-[#6B6D6E]">
+                      <div className="grid grid-cols-7 gap-1 text-center text-[10px] font-bold text-[#6B6D6E]">
                         {["L", "M", "X", "J", "V", "S", "D"].map((l, i) => (
                           <div key={i}>{l}</div>
                         ))}
                       </div>
-                      <div className="grid grid-cols-7 gap-y-0.5">
+                      <div className="grid grid-cols-7 gap-1">
                         {Array.from({ length: primerDiaSemana }).map((_, i) => (
                           <div key={`v${i}`} />
                         ))}
@@ -809,32 +837,30 @@ export default function PanelPrincipal({ recargar = 0, arriba, onMes }: { recarg
                           const c = colorDelDia(d);
                           const sel = seleccion?.asesoraId === f.asesora.id && seleccion.dia === d.dia;
                           const esHoy = d.fecha === hoy;
-                          // Con un indicador elegido, sus dias se resaltan; sin indicador se ve solo el punto.
-                          const resaltado = !!kpiActivo && cumple(kpiActivo, d, hoy);
-                          const colorResalte = kpiActivo ? COLOR[kpiActivo] : null;
-                          const atenuado = !!kpiActivo && !resaltado;
+                          // Con un filtro elegido, sus dias quedan a todo color y el resto se apaga.
+                          const apagado = !!filtroEfectivo && !cumpleFiltro(filtroEfectivo, d, hoy);
+                          const aro = "0 0 0 2px #FFFFFF, 0 0 0 4px ";
                           return (
                             <button
                               key={d.dia}
                               onClick={() => setSeleccion(sel ? null : { asesoraId: f.asesora.id, dia: d.dia })}
-                              className="flex flex-col items-center py-0.5"
-                              style={{ opacity: atenuado ? 0.4 : 1 }}
+                              className="h-11 rounded-[10px] flex flex-col items-center justify-center leading-none transition-opacity"
+                              style={{
+                                background: c ? c.punto : "#F2F8F9",
+                                color: c ? c.texto : "#9AA3A4",
+                                opacity: apagado ? 0.22 : 1,
+                                boxShadow: sel
+                                  ? aro + "#0B3A41"
+                                  : filtroEfectivo && !apagado
+                                  ? aro + (c?.punto ?? "#0B5F6C")
+                                  : esHoy
+                                  ? "inset 0 0 0 2.5px #0B3A41"
+                                  : "none",
+                              }}
                               aria-label={`Día ${d.dia}${esHoy ? " (hoy)" : ""}: ${ESTILO[d.estatus].etiqueta}`}
                             >
-                              <span
-                                className="grid place-items-center w-8 h-8 rounded-full text-[13px] font-semibold"
-                                style={{
-                                  background: resaltado && colorResalte ? colorResalte.punto : esHoy ? "#1EA6B8" : "transparent",
-                                  color: resaltado && colorResalte ? colorResalte.texto : esHoy ? "#FFFFFF" : "#14181A",
-                                  fontWeight: resaltado || esHoy ? 800 : 500,
-                                  boxShadow: sel ? "0 0 0 2px #0B5F6C" : resaltado && esHoy ? "0 0 0 2px #FFFFFF, 0 0 0 4px #1EA6B8" : "none",
-                                }}
-                              >
-                                {d.dia}
-                              </span>
-                              <span className="h-1.5 mt-0.5 flex items-center">
-                                {c && !resaltado && <span className="w-1.5 h-1.5 rounded-full" style={{ background: c.punto }} />}
-                              </span>
+                              <span className="text-[13px] font-extrabold">{d.dia}</span>
+                              {esHoy && <span className="text-[8px] font-bold mt-0.5 tracking-wide">HOY</span>}
                             </button>
                           );
                         })}

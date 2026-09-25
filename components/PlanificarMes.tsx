@@ -266,7 +266,7 @@ export default function PlanificarMes({
         </div>
       </div>
 
-      <div className="grid grid-cols-7 gap-y-0.5">
+      <div className="grid grid-cols-7 gap-1">
         {SEMANA.map((n) => (
           <div key={n} className="text-center text-[10px] font-bold text-[#6B6D6E]">
             {n === "Mié" ? "X" : n[0]}
@@ -284,16 +284,16 @@ export default function PlanificarMes({
               key={f}
               onClick={() => alternarDia(f)}
               disabled={bloqueado}
-              className="flex flex-col items-center py-0.5 disabled:opacity-40"
+              className="disabled:opacity-40"
               aria-label={`Día ${Number(f.slice(8))}: ${t?.etiqueta ?? "sin registro"}`}
             >
               <span
-                className="grid place-items-center w-8 h-8 rounded-full text-[13px]"
+                className="grid place-items-center w-full h-11 rounded-[10px] text-[13px]"
                 style={{
-                  background: t?.fondo ?? "transparent",
-                  color: t?.texto ?? (bloqueado ? "#E5484D" : "#14181A"),
+                  background: t?.fondo ?? "#F2F8F9",
+                  color: t?.texto ?? (bloqueado ? "#E5484D" : "#6B6D6E"),
                   fontWeight: t || f === hoy ? 800 : 500,
-                  boxShadow: cambiado ? "0 0 0 2px #35DCEC" : f === hoy && !t ? "inset 0 0 0 2px #1EA6B8" : "none",
+                  boxShadow: cambiado ? "0 0 0 2px #FFFFFF, 0 0 0 4px #35DCEC" : f === hoy ? "inset 0 0 0 2.5px #0B3A41" : "none",
                 }}
               >
                 {Number(f.slice(8))}

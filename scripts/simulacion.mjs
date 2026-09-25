@@ -82,11 +82,12 @@ async function sembrar() {
   // Ejemplos garantizados de hoy y ayer para que siempre se vean anomalias recientes.
   const forzadosPorDia = {
     [DIA_HOY]: { 12: "sinSalida", 13: "sinEntrada", 14: "corta", 16: "corta" },
-    [DIA_HOY - 1]: { 12: "corta", 13: "sinSalida", 14: "sinEntrada", 17: "sinSalida" },
+    [DIA_HOY - 1]: { 12: "corta", 13: "sinSalida", 14: "sinEntrada", 17: "sinSalida", 19: "extra", 20: "extra" },
+    [DIA_HOY - 3]: { 19: "corta" }, // salio antes (cita) y repuso el dia siguiente con tiempo extra
   };
   // Escenarios garantizados de HOY para ver todos los avisos: en jornada, sin entrada (pendiente), jornada completa y horas ajustadas.
   // Libre, vacaciones e incapacidad de hoy ya salen de los rangos de arriba (dia 2 de 7 de incapacidad, vacaciones del 16 al 27).
-  const hoyEscenarios = { 1: "enJornada", 3: "enJornada", 8: "pendiente", 10: "pendiente", 17: "pendiente", 18: "pendiente", 21: "completa", 22: "completa", 23: "ajustada" };
+  const hoyEscenarios = { 1: "enJornada", 3: "enJornada", 8: "pendiente", 10: "pendiente", 17: "pendiente", 18: "pendiente", 21: "completa", 22: "completa", 23: "ajustada", 24: "extra" };
   const corregidas = { 8: [9], 12: [11], 17: [17], 24: [18] }; // salieron antes por una cita y Nuria completo la jornada
   const marcasCorregidas = [];
 
@@ -137,6 +138,7 @@ async function sembrar() {
         } else {
           marcas.push({ asesora_id: a.id, fecha, hora: hhmm(480), tipo: "entrada", origen: "ocr" });
           if (h === "completa") marcas.push({ asesora_id: a.id, fecha, hora: hhmm(1020), tipo: "salida", origen: "ocr" });
+          else if (h === "extra") marcas.push({ asesora_id: a.id, fecha, hora: hhmm(1080), tipo: "salida", origen: "ocr" });
           else marcasCorregidas.push({ asesora_id: a.id, fecha, hora: hhmm(1020), tipo: "salida", origen: "manual", hora_original: hhmm(930), motivo_correccion: "Permiso para una cita (simulacion)" });
         }
         esperado[a.nombre][dia] = 1;
@@ -151,6 +153,7 @@ async function sembrar() {
       const entradaMin = escenario === "tarde" ? 495 + Math.floor(azar() * 40) : 472 + Math.floor(azar() * 14);
       let salidaMin = entradaMin + 540 + Math.floor(azar() * 12);
       if (escenario === "corta") salidaMin = entradaMin + 450;
+      if (escenario === "extra") salidaMin = entradaMin + 540 + 60; // 1 h sobre la jornada
 
       if (escenario === "ausencia") { esperado[a.nombre][dia] = dia >= DIA_HOY ? null : 2; if (dia < DIA_HOY) c.ausencias++; continue; }
       if (escenario === "sinSalida") { marcas.push({ asesora_id: a.id, fecha, hora: hhmm(entradaMin), tipo: "entrada", origen: "ocr" }); esperado[a.nombre][dia] = 1; c.sinSalida++; continue; }
@@ -167,7 +170,7 @@ async function sembrar() {
       marcas.push({ asesora_id: a.id, fecha, hora: hhmm(salidaMin), tipo: "salida", origen: "ocr" });
       if (i === 3 && dia === 10) { marcas.push({ asesora_id: a.id, fecha, hora: hhmm(entradaMin + 4), tipo: "entrada", origen: "ocr" }); c.entradaDoble++; }
       esperado[a.nombre][dia] = 1;
-      if (escenario === "tarde") c.tardes++; else if (escenario === "corta") c.cortas++; else c.completos++;
+      if (escenario === "tarde") c.tardes++; else if (escenario === "corta") c.cortas++; else if (escenario === "extra") c.extras = (c.extras ?? 0) + 1; else c.completos++;
     }
   });
 
