@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import FormPermisos from "@/components/FormPermisos";
+import PlanificarMes from "@/components/PlanificarMes";
 import PreguntaFeriados from "@/components/PreguntaFeriados";
 import Comentarios from "@/components/Comentarios";
 import CorregirHoras from "@/components/CorregirHoras";
@@ -30,22 +30,58 @@ const ESTILO: Record<EstatusDia, { etiqueta: string; letra: string; fondo: strin
   fuera: { etiqueta: "Aún no laboraba / ya no labora", letra: "–", fondo: "#FFFFFF", texto: "#9AA3A4" },
 };
 
-const LEYENDA: EstatusDia[] = ["asistencia", "ausencia", "libre", "vacaciones", "incapacidad", "parcial", "enJornada", "feriado"];
-const MANUALES: EstatusDia[] = ["libre", "vacaciones", "incapacidad", "ausencia"];
+// Un color por situacion (dentro de la paleta TRIXO): punto en el calendario y resaltado al elegir un indicador.
+const COLOR: Record<string, { punto: string; texto: string }> = {
+  asistencia: { punto: "#1EA6B8", texto: "#FFFFFF" },
+  ausencia: { punto: "#E5484D", texto: "#FFFFFF" },
+  libre: { punto: "#8E9A9C", texto: "#FFFFFF" },
+  vacaciones: { punto: "#0B5F6C", texto: "#FFFFFF" },
+  incapacidad: { punto: "#7B61D6", texto: "#FFFFFF" },
+  faltaMarca: { punto: "#F5B700", texto: "#3A2F00" },
+  jornadaIncompleta: { punto: "#F0742A", texto: "#FFFFFF" },
+  enJornada: { punto: "#35DCEC", texto: "#0B3A41" },
+  feriado: { punto: "#57585A", texto: "#FFFFFF" },
+};
+
+/** Color del punto de un dia en el calendario (null = sin punto). */
+function colorDelDia(d: DiaCalculado): { punto: string; texto: string } | null {
+  switch (d.estatus) {
+    case "asistencia":
+      return d.horas !== null && d.horas < 8 ? COLOR.jornadaIncompleta : COLOR.asistencia;
+    case "parcial":
+      return COLOR.faltaMarca;
+    case "pendiente":
+    case "fuera":
+      return null;
+    default:
+      return COLOR[d.estatus];
+  }
+}
+
+const LEYENDA: [string, string][] = [
+  ["asistencia", "Asistencia"],
+  ["ausencia", "Ausencia"],
+  ["libre", "Libre"],
+  ["vacaciones", "Vacaciones"],
+  ["incapacidad", "Incapacidad"],
+  ["faltaMarca", "Falta marca"],
+  ["jornadaIncompleta", "Jornada incompleta"],
+  ["enJornada", "En jornada"],
+  ["feriado", "Feriado"],
+];
 
 type Periodo = "dia" | "semana" | "mes";
-type Kpi = "ausencia" | "faltaMarca" | "jornadaIncompleta";
+type Kpi = "ausencia" | "faltaMarca" | "jornadaIncompleta" | "incapacidad" | "vacaciones" | "libre";
 type Tono = "ok" | "warn" | "info";
 
 const KPIS: { id: Kpi; etiqueta: string; fondo: string; texto: string; borde?: string }[] = [
   { id: "ausencia", etiqueta: "Ausencia", fondo: ESTILO.ausencia.fondo, texto: ESTILO.ausencia.texto },
   { id: "faltaMarca", etiqueta: "Falta marca", fondo: "#35DCEC", texto: "#0B3A41" },
   { id: "jornadaIncompleta", etiqueta: "Jornada incompleta", fondo: "#FFFFFF", texto: "#0B3A41", borde: "#35DCEC" },
+  { id: "incapacidad", etiqueta: "Incapacidad", fondo: ESTILO.incapacidad.fondo, texto: ESTILO.incapacidad.texto },
+  { id: "vacaciones", etiqueta: "Vacaciones", fondo: ESTILO.vacaciones.fondo, texto: ESTILO.vacaciones.texto },
+  { id: "libre", etiqueta: "Libre", fondo: ESTILO.libre.fondo, texto: ESTILO.libre.texto },
 ];
-
-function normalizar(texto: string): string {
-  return texto.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
-}
 
 function diasEnMes(mes: string): number {
   const [anio, m] = mes.split("-").map(Number);
@@ -95,6 +131,10 @@ function cumple(kpi: Kpi, d: DiaCalculado, hoy: string): boolean {
       return d.estatus === "parcial" || (d.estatus === "pendiente" && d.fecha === hoy && !d.entrada && !d.salida && !d.manual);
     case "jornadaIncompleta":
       return d.estatus === "asistencia" && d.horas !== null && d.horas < 8;
+    case "incapacidad":
+    case "vacaciones":
+    case "libre":
+      return d.estatus === kpi;
   }
 }
 
@@ -138,13 +178,13 @@ function describirDia(d: DiaCalculado): string {
 function DetalleDia({
   fila,
   dia,
-  onElegir,
+  detallePermiso,
   onCorregido,
   onCerrar,
 }: {
   fila: FilaAsesora;
   dia: DiaCalculado;
-  onElegir: (tipo: EstatusDia | "auto") => void;
+  detallePermiso: string;
   onCorregido: () => void;
   onCerrar: () => void;
 }) {
@@ -165,7 +205,7 @@ function DetalleDia({
         <span className="flex-none rounded-full px-2.5 py-1 text-[11.5px] font-bold" style={{ background: estilo.fondo, color: estilo.texto }}>
           {estilo.etiqueta}
         </span>
-        <span className="text-[12px] leading-snug">{describirDia(dia)}</span>
+        <span className="text-[12px] leading-snug">{[detallePermiso, describirDia(dia)].filter(Boolean).join(" · ")}</span>
       </div>
       {corrigiendo ? (
         <CorregirHoras
@@ -191,34 +231,14 @@ function DetalleDia({
           Corregir horas de entrada y salida
         </button>
       )}
-      <div className="grid grid-cols-2 gap-1.5">
-        {MANUALES.map((t) => (
-          <button
-            key={t}
-            onClick={() => onElegir(t)}
-            className={`rounded-lg py-2.5 text-[12.5px] font-semibold ${
-              dia.manual && dia.estatus === t ? "bg-[#0B5F6C] text-white" : "bg-[#E4F7F9] text-[#0B5F6C]"
-            }`}
-          >
-            {ESTILO[t].etiqueta}
-          </button>
-        ))}
-      </div>
-      {dia.manual && (
-        <button
-          onClick={() => onElegir("auto")}
-          className="w-full rounded-lg border border-[#DDE7E8] py-2 text-[12px] font-semibold text-[#B23A3A]"
-        >
-          Quitar lo registrado y dejar que el sistema decida
-        </button>
-      )}
     </div>
   );
 }
 
-export default function PanelPrincipal({ recargar = 0, arriba }: { recargar?: number; arriba?: ReactNode }) {
+export default function PanelPrincipal({ recargar = 0, arriba, onMes }: { recargar?: number; arriba?: ReactNode; onMes?: (mes: string) => void }) {
   const [referencia, setReferencia] = useState(() => ahoraCR().fecha);
-  const [periodo, setPeriodo] = useState<Periodo>("dia");
+  // Solo se ve el mes: los indicadores cuentan todo el mes y cada asesora muestra su estado de hoy.
+  const periodo = "mes" as Periodo;
   const [kpiActivo, setKpiActivo] = useState<Kpi | null>(null);
   const [asesoras, setAsesoras] = useState<Asesora[]>([]);
   const [marcas, setMarcas] = useState<Marca[]>([]);
@@ -226,14 +246,11 @@ export default function PanelPrincipal({ recargar = 0, arriba }: { recargar?: nu
   const [feriados, setFeriados] = useState<Feriado[]>([]);
   const [feriadosConfirmados, setFeriadosConfirmados] = useState(false);
   const [cargando, setCargando] = useState(true);
-  const [busqueda, setBusqueda] = useState("");
-  const [punto, setPunto] = useState("");
   const [abierta, setAbierta] = useState<string | null>(null);
   const [moviendoId, setMoviendoId] = useState<string | null>(null);
   const [permisoAbiertoId, setPermisoAbiertoId] = useState<string | null>(null);
   const [seleccion, setSeleccion] = useState<Seleccion>(null);
   const [refresco, setRefresco] = useState(0);
-  const [tipoManual, setTipoManual] = useState<"libre" | "vacaciones" | "incapacidad" | "feriado">("libre");
   const [mostrarNueva, setMostrarNueva] = useState(false);
   const [aviso, setAviso] = useState<string | null>(null);
   const [nuevoFeriadoFecha, setNuevoFeriadoFecha] = useState("");
@@ -241,6 +258,11 @@ export default function PanelPrincipal({ recargar = 0, arriba }: { recargar?: nu
   const inicioRef = useRef<HTMLDivElement>(null);
 
   const mes = referencia.slice(0, 7);
+
+  useEffect(() => {
+    onMes?.(mes);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mes]);
 
   async function cargar() {
     const [rAsesoras, rMarcas, rDias, rFeriados] = await Promise.all([
@@ -315,7 +337,7 @@ export default function PanelPrincipal({ recargar = 0, arriba }: { recargar?: nu
   const coincidencias = useMemo(() => {
     const porAsesora = new Map<string, Record<Kpi, DiaCalculado[]>>();
     const vacio = (): Record<Kpi, DiaCalculado[]> => ({
-      ausencia: [], faltaMarca: [], jornadaIncompleta: [],
+      ausencia: [], faltaMarca: [], jornadaIncompleta: [], incapacidad: [], vacaciones: [], libre: [],
     });
     for (const f of filas) {
       const r = vacio();
@@ -343,14 +365,12 @@ export default function PanelPrincipal({ recargar = 0, arriba }: { recargar?: nu
     return t;
   }, [filas, coincidencias]);
 
-  const esFeriadoRef = periodo === "dia" && fechasFeriado.has(referencia);
+  const esFeriadoRef = false;
   const feriadoRef = feriados.find((f) => f.fecha === referencia);
-  const idxDia = Number(referencia.slice(8)) - 1;
+  const idxDia = mes === hoy.slice(0, 7) ? Number(hoy.slice(8)) - 1 : 0; // dia que se muestra en cada tarjeta
 
   const filasVisibles = useMemo(() => {
-    const q = normalizar(busqueda.trim());
-    let lista = filas.filter((f) => !q || normalizar(f.asesora.nombre).includes(q) || normalizar(f.asesora.punto).includes(q));
-    if (punto) lista = lista.filter((f) => f.asesora.punto === punto);
+    let lista = filas;
     if (periodo === "dia") {
       // Como en la vista diaria: no se lista a quien aun no ingresaba, ni (en feriado) a quien no lo trabajo.
       lista = lista.filter((f) => {
@@ -367,7 +387,7 @@ export default function PanelPrincipal({ recargar = 0, arriba }: { recargar?: nu
       );
     }
     return lista;
-  }, [filas, busqueda, punto, kpiActivo, coincidencias, periodo, idxDia, esFeriadoRef]);
+  }, [filas, kpiActivo, coincidencias, periodo, idxDia, esFeriadoRef]);
 
   // Texto corto y tono del dia elegido (vista diaria).
   function textoDia(f: FilaAsesora, d: DiaCalculado): { texto: string; tono: Tono } {
@@ -397,24 +417,20 @@ export default function PanelPrincipal({ recargar = 0, arriba }: { recargar?: nu
         const r = rangoConsecutivo(fechasPermiso.get(`${f.asesora.id}|${d.estatus}`) ?? [d.fecha], d.fecha);
         if (r.total > 1) texto += ` · del ${diaMes(r.inicio)} al ${diaMes(r.fin)} (día ${r.posicion} de ${r.total})`;
         if (d.nota) texto += ` · ${d.nota}`;
+        if (d.estatus === "vacaciones" || d.estatus === "incapacidad") texto += ` · regresa el ${diaMes(sumarDias(r.fin, 1))}`;
         if (d.marcasEnPermiso) return { texto: `${texto} · Tiene marcas este día: ¿trabajó pese al permiso?`, tono: "warn" };
         return { texto, tono: "info" };
       }
     }
   }
 
-  async function elegir(f: FilaAsesora, d: DiaCalculado, tipo: EstatusDia | "auto") {
-    if (tipo === "auto") {
-      await fetch(`/api/dias-especiales?asesora_id=${f.asesora.id}&fecha=${d.fecha}`, { method: "DELETE" });
-    } else {
-      await fetch("/api/dias-especiales", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ asesora_id: f.asesora.id, fecha: d.fecha, tipo }),
-      });
-    }
-    await cargar();
-    setRefresco((v) => v + 1);
+  // "del 10/9 al 16/9 (día 3 de 7) · regresa el 17/9" para libre, vacaciones e incapacidad.
+  function detallePermiso(f: FilaAsesora, d: DiaCalculado): string {
+    if (d.estatus !== "libre" && d.estatus !== "vacaciones" && d.estatus !== "incapacidad") return "";
+    const r = rangoConsecutivo(fechasPermiso.get(`${f.asesora.id}|${d.estatus}`) ?? [d.fecha], d.fecha);
+    if (r.total <= 1) return "";
+    const regreso = d.estatus === "libre" ? "" : ` · regresa el ${diaMes(sumarDias(r.fin, 1))}`;
+    return `del ${diaMes(r.inicio)} al ${diaMes(r.fin)} (día ${r.posicion} de ${r.total})${regreso}`;
   }
 
   async function agregarFeriado() {
@@ -443,9 +459,7 @@ export default function PanelPrincipal({ recargar = 0, arriba }: { recargar?: nu
     setSeleccion(null);
     setAbierta(null);
     setMoviendoId(null);
-    if (periodo === "dia") setReferencia(sumarDias(referencia, delta));
-    else if (periodo === "semana") setReferencia(sumarDias(referencia, 7 * delta));
-    else {
+    {
       const [a, m] = mes.split("-").map(Number);
       const nuevo = new Date(Date.UTC(a, m - 1 + delta, 1)).toISOString().slice(0, 7);
       setReferencia(nuevo === hoy.slice(0, 7) ? hoy : `${nuevo}-01`);
@@ -460,13 +474,11 @@ export default function PanelPrincipal({ recargar = 0, arriba }: { recargar?: nu
     setMoviendoId(null);
   }
 
-  function irAlDia(fecha: string) {
-    setReferencia(fecha);
-    setPeriodo("dia");
-    setKpiActivo(null);
-    setSeleccion(null);
-    setAbierta(null);
-    inicioRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  function verDiaEnCalendario(f: FilaAsesora, dia: number) {
+    setAbierta(f.asesora.id);
+    setSeleccion({ asesoraId: f.asesora.id, dia });
+    setPermisoAbiertoId(null);
+    setMoviendoId(null);
   }
 
   const filaSel = seleccion ? filas.find((f) => f.asesora.id === seleccion.asesoraId) : undefined;
@@ -481,7 +493,6 @@ export default function PanelPrincipal({ recargar = 0, arriba }: { recargar?: nu
       : aSetiembre(new Date(`${mes}-01T12:00:00`).toLocaleDateString("es-CR", { month: "long", year: "numeric" }));
 
   const esHoyElPeriodo = hoy >= rango.desde && hoy <= rango.hasta;
-  const mesTexto = aSetiembre(new Date(`${mes}-01T12:00:00`).toLocaleDateString("es-CR", { month: "long", year: "numeric" }));
 
   return (
     <div className="space-y-3">
@@ -493,90 +504,30 @@ export default function PanelPrincipal({ recargar = 0, arriba }: { recargar?: nu
 
       <div ref={inicioRef} className="scroll-mt-20" />
 
-      {/* Excel del mes */}
-      <div className="rounded-xl border border-[#DDE7E8] bg-white p-3 space-y-2">
-        <div className="text-[12.5px] font-bold text-[#0B5F6C]">Excel de {mesTexto}</div>
-        <div className="grid grid-cols-2 gap-2">
-          <a
-            href={`/api/export/calendario?mes=${mes}`}
-            className="text-center text-[12.5px] font-bold rounded-xl border-2 border-[#1EA6B8] text-[#0B5F6C] py-3"
-          >
-            ⬇ Asistencia
-          </a>
-          <a
-            href={`/api/export/bitacora?mes=${mes}`}
-            className="text-center text-[12.5px] font-bold rounded-xl border-2 border-[#1EA6B8] text-[#0B5F6C] py-3"
-          >
-            ⬇ Marcas (bitácora)
-          </a>
-        </div>
-      </div>
-
       {/* Carga del lote de fotos */}
       {arriba}
 
       <PreguntaFeriados key={`feriados-${mes}`} mes={mes} onCambio={() => void cargar()} />
 
-      {/* Periodo de los indicadores */}
-      <div className="space-y-2">
-        <div className="flex gap-1.5">
-          {(
-            [
-              ["dia", "Día"],
-              ["semana", "Semana"],
-              ["mes", "Mes"],
-            ] as [Periodo, string][]
-          ).map(([id, etiqueta]) => (
-            <button
-              key={id}
-              onClick={() => {
-                setPeriodo(id);
-                setMoviendoId(null);
-              }}
-              className={`flex-1 rounded-lg py-2.5 text-[13px] font-semibold ${
-                periodo === id ? "bg-[#0B5F6C] text-white" : "bg-[#E4F7F9] text-[#0B5F6C]"
-              }`}
-            >
-              {etiqueta}
-            </button>
-          ))}
-        </div>
-        <div className="flex items-center gap-2">
-          <button onClick={() => mover(-1)} className="w-9 h-9 rounded-lg border border-[#DDE7E8] bg-white text-[#0B5F6C] font-bold" aria-label="Anterior">
-            ‹
-          </button>
-          <div className="flex-1 min-w-0 text-center">
-            <div className="text-[13px] font-extrabold text-[#0B5F6C] leading-tight">{etiquetaPeriodo}</div>
-            {esHoyElPeriodo && (
-              <span className="inline-block mt-0.5 rounded-full bg-[#35DCEC] text-[#0B3A41] px-2 py-0.5 text-[10px] font-bold">
-                {periodo === "dia" ? "Hoy" : periodo === "semana" ? "Incluye hoy" : "Mes actual"}
-              </span>
-            )}
-          </div>
-          <button onClick={() => mover(1)} className="w-9 h-9 rounded-lg border border-[#DDE7E8] bg-white text-[#0B5F6C] font-bold" aria-label="Siguiente">
-            ›
-          </button>
-        </div>
-        <div className="flex items-center gap-2">
-          <input
-            type="date"
-            value={referencia}
-            onChange={(e) => {
-              if (e.target.value) {
-                setReferencia(e.target.value);
-                setSeleccion(null);
-                setAbierta(null);
-                setMoviendoId(null);
-              }
-            }}
-            className="flex-1 rounded-lg border border-[#DDE7E8] bg-white p-2 text-[12.5px]"
-          />
-          {referencia !== hoy && (
-            <button onClick={() => setReferencia(hoy)} className="rounded-lg bg-[#E4F7F9] text-[#0B5F6C] px-3 py-2 text-[12.5px] font-semibold">
-              Ir a hoy
-            </button>
+      {/* Mes que se esta viendo */}
+      <div className="flex items-center gap-2">
+        <button onClick={() => mover(-1)} className="w-9 h-9 rounded-lg border border-[#DDE7E8] bg-white text-[#0B5F6C] font-bold" aria-label="Mes anterior">
+          ‹
+        </button>
+        <div className="flex-1 min-w-0 text-center">
+          <div className="text-[13px] font-extrabold text-[#0B5F6C] leading-tight capitalize">{etiquetaPeriodo}</div>
+          {esHoyElPeriodo && (
+            <span className="inline-block mt-0.5 rounded-full bg-[#35DCEC] text-[#0B3A41] px-2 py-0.5 text-[10px] font-bold">Mes actual</span>
           )}
         </div>
+        <button onClick={() => mover(1)} className="w-9 h-9 rounded-lg border border-[#DDE7E8] bg-white text-[#0B5F6C] font-bold" aria-label="Mes siguiente">
+          ›
+        </button>
+        {!esHoyElPeriodo && (
+          <button onClick={() => setReferencia(hoy)} className="rounded-lg bg-[#E4F7F9] text-[#0B5F6C] px-3 py-2 text-[12.5px] font-semibold">
+            Ir a hoy
+          </button>
+        )}
       </div>
 
       {esFeriadoRef && (
@@ -607,7 +558,10 @@ export default function PanelPrincipal({ recargar = 0, arriba }: { recargar?: nu
                   }}
                 >
                   <div className="font-extrabold text-2xl leading-none">{personas}</div>
-                  <div className="text-[10.5px] font-bold uppercase tracking-wide mt-1 leading-tight">{k.etiqueta}</div>
+                  <div className="text-[10.5px] font-bold uppercase tracking-wide mt-1 leading-tight">
+                    <span className="inline-block w-2 h-2 rounded-full mr-1 align-middle" style={{ background: COLOR[k.id].punto, boxShadow: "0 0 0 1.5px #FFFFFF" }} />
+                    {k.etiqueta}
+                  </div>
                   <div className="text-[10.5px] opacity-80 mt-0.5">
                     {personas === 1 ? "persona" : "personas"}
                     {periodo !== "dia" ? ` · ${dias} ${dias === 1 ? "día" : "días"}` : ""}
@@ -622,111 +576,58 @@ export default function PanelPrincipal({ recargar = 0, arriba }: { recargar?: nu
               : "Toca un indicador para ver y resaltar a las asesoras que cumplen esa condición."}
           </p>
 
-          {/* Lo que registra Nuria: feriados, libres, vacaciones e incapacidades */}
-          <div className="rounded-xl border-2 border-[#1EA6B8] bg-white p-3 space-y-2.5">
-            <div>
-              <div className="text-[13px] font-extrabold text-[#0B5F6C]">Lo que registra Nuria</div>
-              <p className="text-[11.5px] text-[#6B6D6E] leading-snug">
-                Anota aquí los libres, vacaciones, incapacidades y feriados, incluso con anticipación. La asistencia y la ausencia las
-                completa el sistema con las marcas.
+          {/* Feriados del mes: son de todas, no de una asesora */}
+          <details className="rounded-xl border border-[#DDE7E8] bg-white px-3 py-2.5">
+            <summary className="text-[12.5px] font-bold text-[#0B5F6C] cursor-pointer">
+              Feriados de este mes{feriados.length > 0 ? ` (${feriados.length})` : ""}
+            </summary>
+            <div className="mt-2 space-y-2">
+              <p className="text-[11px] text-[#6B6D6E] leading-snug">
+                Se trabajan de forma opcional: ese día solo se lista a quienes marcaron, y nadie cuenta como ausente. Los libres, vacaciones e
+                incapacidades se anotan en cada asesora (ícono 🗓️).
               </p>
-            </div>
-            <div className="grid grid-cols-4 gap-1.5">
-              {(
-                [
-                  ["libre", "Libre"],
-                  ["vacaciones", "Vacaciones"],
-                  ["incapacidad", "Incapacidad"],
-                  ["feriado", "Feriado"],
-                ] as ["libre" | "vacaciones" | "incapacidad" | "feriado", string][]
-              ).map(([id, etiqueta]) => (
-                <button
-                  key={id}
-                  onClick={() => setTipoManual(id)}
-                  className={`rounded-lg py-2.5 text-[11.5px] font-bold ${tipoManual === id ? "bg-[#0B5F6C] text-white" : "bg-[#E4F7F9] text-[#0B5F6C]"}`}
-                >
-                  {etiqueta}
-                </button>
-              ))}
-            </div>
-
-            {tipoManual === "feriado" ? (
-              <div className="rounded-xl border border-[#DDE7E8] bg-white p-3 space-y-2">
-                <div className="text-[12.5px] font-bold text-[#0B5F6C]">Feriados de este mes</div>
-                <p className="text-[11px] text-[#6B6D6E] leading-snug">
-                  Se trabajan de forma opcional: ese día solo se lista a quienes marcaron, y nadie cuenta como ausente.
-                </p>
-                {feriados.length === 0 && <p className="text-[11.5px] text-[#6B6D6E]">Sin feriados definidos este mes.</p>}
-                {feriados.map((fe) => (
-                  <div key={fe.id} className="flex items-center justify-between text-[12px] bg-[#F2F8F9] rounded-lg px-2.5 py-2">
-                    <span>
-                      {Number(fe.fecha.split("-")[2])} — {fe.descripcion || "Feriado"}
-                    </span>
-                    <button onClick={() => quitarFeriado(fe.fecha)} className="text-[#B23A3A] text-[11.5px] font-semibold">
-                      Quitar
-                    </button>
-                  </div>
-                ))}
-                <div className="flex gap-2">
-                  <input
-                    type="date"
-                    value={nuevoFeriadoFecha}
-                    onChange={(e) => setNuevoFeriadoFecha(e.target.value)}
-                    className="rounded-lg border border-[#DDE7E8] p-2 text-[12px] flex-1"
-                  />
-                  <input
-                    placeholder="Nombre (opcional)"
-                    value={nuevoFeriadoDesc}
-                    onChange={(e) => setNuevoFeriadoDesc(e.target.value)}
-                    className="rounded-lg border border-[#DDE7E8] p-2 text-[12px] flex-1"
-                  />
-                  <button onClick={agregarFeriado} className="rounded-lg bg-[#0B5F6C] text-white px-3.5 text-sm font-bold">
-                    +
+              {feriados.length === 0 && <p className="text-[11.5px] text-[#6B6D6E]">Sin feriados definidos este mes.</p>}
+              {feriados.map((fe) => (
+                <div key={fe.id} className="flex items-center justify-between text-[12px] bg-[#F2F8F9] rounded-lg px-2.5 py-2">
+                  <span>
+                    {Number(fe.fecha.split("-")[2])} — {fe.descripcion || "Feriado"}
+                  </span>
+                  <button onClick={() => quitarFeriado(fe.fecha)} className="text-[#B23A3A] text-[11.5px] font-semibold">
+                    Quitar
                   </button>
                 </div>
+              ))}
+              <div className="flex gap-2">
+                <input
+                  type="date"
+                  value={nuevoFeriadoFecha}
+                  onChange={(e) => setNuevoFeriadoFecha(e.target.value)}
+                  className="rounded-lg border border-[#DDE7E8] p-2 text-[12px] flex-1"
+                />
+                <input
+                  placeholder="Nombre (opcional)"
+                  value={nuevoFeriadoDesc}
+                  onChange={(e) => setNuevoFeriadoDesc(e.target.value)}
+                  className="rounded-lg border border-[#DDE7E8] p-2 text-[12px] flex-1"
+                />
+                <button onClick={agregarFeriado} className="rounded-lg bg-[#0B5F6C] text-white px-3.5 text-sm font-bold">
+                  +
+                </button>
               </div>
-            ) : (
-              <FormPermisos key={tipoManual} abiertoInicial sinTitulo ocultarTipo tipoInicial={tipoManual} onCambio={recargarTodo} />
-            )}
-          </div>
+            </div>
+          </details>
 
           <div className="flex flex-wrap gap-x-3 gap-y-1 text-[10.5px] text-[#3A3B3C]">
-            {LEYENDA.map((k) => (
+            {LEYENDA.map(([k, etiqueta]) => (
               <span key={k} className="flex items-center gap-1">
-                <span
-                  className="inline-grid place-items-center w-4 h-4 rounded text-[9px] font-bold"
-                  style={{ background: ESTILO[k].fondo, color: ESTILO[k].texto, border: "1px solid #DDE7E8" }}
-                >
-                  {ESTILO[k].letra}
-                </span>
-                {ESTILO[k].etiqueta}
+                <span className="inline-block w-2 h-2 rounded-full" style={{ background: COLOR[k].punto }} />
+                {etiqueta}
               </span>
             ))}
           </div>
 
           {/* Asesoras: busqueda, filtro por punto y alta */}
           <div className="space-y-2">
-            <div className="flex gap-2">
-              <input
-                value={busqueda}
-                onChange={(e) => setBusqueda(e.target.value)}
-                placeholder="Buscar asesora"
-                className="flex-1 min-w-0 rounded-lg border border-[#DDE7E8] bg-white p-2.5 text-[13px]"
-              />
-              <select
-                value={punto}
-                onChange={(e) => setPunto(e.target.value)}
-                className="w-[42%] rounded-lg border border-[#DDE7E8] bg-white p-2.5 text-[13px]"
-              >
-                <option value="">Todos los puntos</option>
-                {puntos.map((p) => (
-                  <option key={p} value={p}>
-                    {p}
-                  </option>
-                ))}
-              </select>
-            </div>
-
             <div className="flex items-center gap-2">
               <div className="flex-1 text-[10.5px] font-bold text-[#6B6D6E] uppercase tracking-wide">
                 {kpiActivo ? `${filasVisibles.length} asesora(s) · ${KPIS.find((k) => k.id === kpiActivo)?.etiqueta}` : `${filasVisibles.length} asesoras`}
@@ -747,7 +648,7 @@ export default function PanelPrincipal({ recargar = 0, arriba }: { recargar?: nu
               const r = f.resumen;
               const expandida = abierta === f.asesora.id;
               const coincide = kpiActivo ? coincidencias.get(f.asesora.id)?.[kpiActivo] ?? [] : [];
-              const dDia = periodo === "dia" ? f.dias[idxDia] : undefined;
+              const dDia = mes === hoy.slice(0, 7) ? f.dias[idxDia] : undefined;
               const info = dDia ? textoDia(f, dDia) : null;
               return (
                 <div
@@ -820,7 +721,7 @@ export default function PanelPrincipal({ recargar = 0, arriba }: { recargar?: nu
                   <div className="pb-1" />
 
                   {/* Semana o mes: detalle de lo que cumple el indicador elegido */}
-                  {kpiActivo && periodo !== "dia" && coincide.length > 0 && (
+                  {kpiActivo && coincide.length > 0 && (
                     <div className="px-3 pb-3 space-y-1.5">
                       {coincide.slice(0, 5).map((d) => (
                         <div key={d.fecha} className="flex items-center gap-2 rounded-lg bg-white border border-[#CFF0F3] px-2.5 py-1.5">
@@ -828,10 +729,10 @@ export default function PanelPrincipal({ recargar = 0, arriba }: { recargar?: nu
                             <b>{diaCorto(d.fecha)}</b> · {describirDia(d) || ESTILO[d.estatus].etiqueta}
                           </div>
                           <button
-                            onClick={() => irAlDia(d.fecha)}
+                            onClick={() => verDiaEnCalendario(f, d.dia)}
                             className="flex-none rounded-lg bg-[#0B5F6C] text-white px-2.5 py-1 text-[11px] font-semibold"
                           >
-                            Ver el día
+                            Ver en el calendario
                           </button>
                         </div>
                       ))}
@@ -841,7 +742,22 @@ export default function PanelPrincipal({ recargar = 0, arriba }: { recargar?: nu
 
                   {expandida && (
                     <div className="border-t border-[#DDE7E8] p-3 space-y-2.5 bg-[#F8FBFB]">
-                      <div className="text-[11.5px] text-[#6B6D6E]">{f.asesora.punto}</div>
+                      <div className="flex items-center gap-2">
+                        <div className="flex-1 min-w-0 text-[11.5px] text-[#6B6D6E]">{f.asesora.punto}</div>
+                        {f.asesora.activo && permisoAbiertoId !== f.asesora.id && (
+                          <button
+                            onClick={() => {
+                              setPermisoAbiertoId(f.asesora.id);
+                              setSeleccion(null);
+                              setMoviendoId(null);
+                            }}
+                            className="flex-none flex items-center gap-1 rounded-lg border border-[#1EA6B8] bg-white text-[#0B5F6C] px-2.5 py-1.5 text-[11.5px] font-bold"
+                            aria-label={`Editar libres, vacaciones e incapacidades de ${f.asesora.nombre} en el calendario`}
+                          >
+                            <span aria-hidden>✏️</span> Editar calendario
+                          </button>
+                        )}
+                      </div>
                       <div className="flex flex-wrap gap-1.5 text-[11px] font-semibold">
                         <span className="text-[10px] text-[#6B6D6E] self-center">En el mes:</span>
                         <span className="rounded-full px-2 py-0.5" style={{ background: ESTILO.asistencia.fondo, color: "#fff" }}>
@@ -861,36 +777,58 @@ export default function PanelPrincipal({ recargar = 0, arriba }: { recargar?: nu
                         )}
                       </div>
 
-                      <div className="grid grid-cols-7 gap-1 text-center text-[10px] font-bold text-[#6B6D6E]">
-                        {["L", "M", "K", "J", "V", "S", "D"].map((l, i) => (
+                      {permisoAbiertoId === f.asesora.id ? (
+                        <PlanificarMes
+                          key={`${f.asesora.id}-${mes}`}
+                          asesoraId={f.asesora.id}
+                          nombre={f.asesora.nombre}
+                          mes={mes}
+                          especiales={diasEspeciales.filter((d) => d.asesora_id === f.asesora.id)}
+                          hoy={hoy}
+                          onCambio={recargarTodo}
+                          onCerrar={() => setPermisoAbiertoId(null)}
+                        />
+                      ) : (
+                        <>
+                      <div className="grid grid-cols-7 text-center text-[10px] font-bold text-[#6B6D6E]">
+                        {["L", "M", "X", "J", "V", "S", "D"].map((l, i) => (
                           <div key={i}>{l}</div>
                         ))}
                       </div>
-                      <div className="grid grid-cols-7 gap-1">
+                      <div className="grid grid-cols-7 gap-y-0.5">
                         {Array.from({ length: primerDiaSemana }).map((_, i) => (
                           <div key={`v${i}`} />
                         ))}
                         {f.dias.map((d) => {
-                          const e = ESTILO[d.estatus];
+                          const c = colorDelDia(d);
                           const sel = seleccion?.asesoraId === f.asesora.id && seleccion.dia === d.dia;
                           const esHoy = d.fecha === hoy;
-                          const esRef = periodo === "dia" && d.fecha === referencia;
+                          // Con un indicador elegido, sus dias se resaltan; sin indicador se ve solo el punto.
+                          const resaltado = !!kpiActivo && cumple(kpiActivo, d, hoy);
+                          const colorResalte = kpiActivo ? COLOR[kpiActivo] : null;
+                          const atenuado = !!kpiActivo && !resaltado;
                           return (
                             <button
                               key={d.dia}
                               onClick={() => setSeleccion(sel ? null : { asesoraId: f.asesora.id, dia: d.dia })}
-                              className="rounded-lg py-1.5 leading-tight relative"
-                              style={{
-                                background: e.fondo,
-                                color: e.texto,
-                                outline: sel ? "2px solid #0B5F6C" : esHoy ? "3px solid #35DCEC" : esRef ? "2px dashed #0B5F6C" : "none",
-                                outlineOffset: 1,
-                                boxShadow: esHoy ? "0 0 0 2px #FFFFFF" : "none",
-                              }}
-                              aria-label={`Día ${d.dia}${esHoy ? " (hoy)" : ""}: ${e.etiqueta}`}
+                              className="flex flex-col items-center py-0.5"
+                              style={{ opacity: atenuado ? 0.4 : 1 }}
+                              aria-label={`Día ${d.dia}${esHoy ? " (hoy)" : ""}: ${ESTILO[d.estatus].etiqueta}`}
                             >
-                              <div className="text-[12px] font-bold">{d.dia}</div>
-                              <div className="text-[9px] font-bold opacity-80">{esHoy ? "HOY" : e.letra}</div>
+                              <span
+                                className="grid place-items-center w-8 h-8 rounded-full text-[13px] font-semibold"
+                                style={{
+                                  background: resaltado && colorResalte ? colorResalte.punto : esHoy ? "#1EA6B8" : "transparent",
+                                  color: resaltado && colorResalte ? colorResalte.texto : esHoy ? "#FFFFFF" : "#14181A",
+                                  fontWeight: resaltado || esHoy ? 800 : 500,
+                                  boxShadow: sel ? "0 0 0 2px #0B5F6C" : resaltado && esHoy ? "0 0 0 2px #FFFFFF, 0 0 0 4px #1EA6B8" : "none",
+                                }}
+                              >
+                                {d.dia}
+                              </span>
+                              <span className="h-1.5 mt-0.5 flex items-center">
+                                {c && !resaltado && <span className="w-1.5 h-1.5 rounded-full" style={{ background: c.punto }} />}
+                              </span>
                             </button>
                           );
                         })}
@@ -900,21 +838,12 @@ export default function PanelPrincipal({ recargar = 0, arriba }: { recargar?: nu
                         <DetalleDia
                           fila={filaSel}
                           dia={diaSel}
-                          onElegir={(t) => void elegir(filaSel, diaSel, t)}
+                          detallePermiso={detallePermiso(filaSel, diaSel)}
                           onCorregido={recargarTodo}
                           onCerrar={() => setSeleccion(null)}
                         />
                       )}
-
-                      {permisoAbiertoId === f.asesora.id ? (
-                        <FormPermisos abiertoInicial asesoraInicial={f.asesora.id} onCambio={recargarTodo} />
-                      ) : (
-                        <button
-                          onClick={() => setPermisoAbiertoId(f.asesora.id)}
-                          className="w-full rounded-lg bg-[#E4F7F9] text-[#0B5F6C] py-2.5 text-[12.5px] font-bold"
-                        >
-                          + Registrar libre, vacaciones o incapacidad para {f.asesora.nombre.split(" ")[0]}
-                        </button>
+                        </>
                       )}
 
                     </div>
@@ -939,7 +868,6 @@ export default function PanelPrincipal({ recargar = 0, arriba }: { recargar?: nu
         mes={periodo === "dia" ? undefined : mes}
         refresco={refresco}
       />
-
     </div>
   );
 }

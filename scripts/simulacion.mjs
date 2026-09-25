@@ -15,6 +15,8 @@ const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.
 // Fecha y hora "hoy" en Costa Rica.
 const partes = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Costa_Rica", year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(new Date());
 const HOY = `${partes.find((p) => p.type === "year").value}-${partes.find((p) => p.type === "month").value}-${partes.find((p) => p.type === "day").value}`;
+const ahoraPartes = new Intl.DateTimeFormat("en-GB", { timeZone: "America/Costa_Rica", hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).formatToParts(new Date());
+const AHORA_MIN = Number(ahoraPartes.find((p) => p.type === "hour").value) * 60 + Number(ahoraPartes.find((p) => p.type === "minute").value);
 const DIA_HOY = HOY.startsWith(MES) ? Number(HOY.slice(8)) : DIAS + 1;
 
 function rng(semilla) {
@@ -82,6 +84,9 @@ async function sembrar() {
     [DIA_HOY]: { 12: "sinSalida", 13: "sinEntrada", 14: "corta", 16: "corta" },
     [DIA_HOY - 1]: { 12: "corta", 13: "sinSalida", 14: "sinEntrada", 17: "sinSalida" },
   };
+  // Escenarios garantizados de HOY para ver todos los avisos: en jornada, sin entrada (pendiente), jornada completa y horas ajustadas.
+  // Libre, vacaciones e incapacidad de hoy ya salen de los rangos de arriba (dia 2 de 7 de incapacidad, vacaciones del 16 al 27).
+  const hoyEscenarios = { 1: "enJornada", 3: "enJornada", 8: "pendiente", 10: "pendiente", 17: "pendiente", 18: "pendiente", 21: "completa", 22: "completa", 23: "ajustada" };
   const corregidas = { 8: [9], 12: [11], 17: [17], 24: [18] }; // salieron antes por una cita y Nuria completo la jornada
   const marcasCorregidas = [];
 
@@ -120,6 +125,21 @@ async function sembrar() {
           marcas.push({ asesora_id: a.id, fecha, hora: hhmm(1020), tipo: "salida", origen: "ocr" });
           esperado[a.nombre][dia] = 1; c.feriadoTrabajado++;
         } else esperado[a.nombre][dia] = null;
+        continue;
+      }
+
+      if (dia === DIA_HOY && hoyEscenarios[i]) {
+        const h = hoyEscenarios[i];
+        if (h === "pendiente") { esperado[a.nombre][dia] = null; continue; }
+        if (h === "enJornada") {
+          // Entro hace ~1.5 h (nunca antes de las 05:00): su jornada aun no termina.
+          marcas.push({ asesora_id: a.id, fecha, hora: hhmm(Math.max(300, AHORA_MIN - 90)), tipo: "entrada", origen: "ocr" });
+        } else {
+          marcas.push({ asesora_id: a.id, fecha, hora: hhmm(480), tipo: "entrada", origen: "ocr" });
+          if (h === "completa") marcas.push({ asesora_id: a.id, fecha, hora: hhmm(1020), tipo: "salida", origen: "ocr" });
+          else marcasCorregidas.push({ asesora_id: a.id, fecha, hora: hhmm(1020), tipo: "salida", origen: "manual", hora_original: hhmm(930), motivo_correccion: "Permiso para una cita (simulacion)" });
+        }
+        esperado[a.nombre][dia] = 1;
         continue;
       }
 

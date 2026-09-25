@@ -329,33 +329,43 @@ export default function PanelCapturar({ onGuardado }: { onGuardado?: () => void 
 
   return (
     <div className="space-y-3">
-      <div
-        onDragOver={(e) => {
-          e.preventDefault();
-          setArrastrando(true);
-        }}
-        onDragLeave={() => setArrastrando(false)}
-        onDrop={onDrop}
-        onClick={() => inputRef.current?.click()}
-        className={`rounded-2xl border-2 border-dashed p-6 text-center text-[13px] font-bold text-[#0B5F6C] cursor-pointer ${
-          arrastrando ? "bg-[#CFF0F3] border-[#0F7A8A]" : "bg-[#E4F7F9] border-[#1EA6B8]"
-        }`}
-      >
-        Toca para elegir TODAS las fotos guardadas del WhatsApp
-        <div className="mt-1 text-[11px] font-normal text-[#6B6D6E]">
-          Se leen en lote; las fotos repetidas se omiten solas
-        </div>
-        <input
-          ref={inputRef}
-          type="file"
-          accept="image/*"
-          multiple
-          className="hidden"
-          onChange={(e) => {
-            if (e.target.files) void procesarArchivos(e.target.files);
-            e.target.value = "";
+      <div className="flex gap-2 items-stretch">
+        <div
+          onDragOver={(e) => {
+            e.preventDefault();
+            setArrastrando(true);
           }}
-        />
+          onDragLeave={() => setArrastrando(false)}
+          onDrop={onDrop}
+          onClick={() => inputRef.current?.click()}
+          className={`flex-1 min-w-0 rounded-2xl border-2 border-dashed px-3 py-4 flex items-center justify-center gap-2 text-[13px] font-bold text-[#0B5F6C] cursor-pointer ${
+            arrastrando ? "bg-[#CFF0F3] border-[#0F7A8A]" : "bg-[#E4F7F9] border-[#1EA6B8]"
+          }`}
+        >
+          <span aria-hidden className="text-lg leading-none">📷</span>
+          Subir fotos de marcas
+          <input
+            ref={inputRef}
+            type="file"
+            accept="image/*"
+            multiple
+            className="hidden"
+            onChange={(e) => {
+              if (e.target.files) void procesarArchivos(e.target.files);
+              e.target.value = "";
+            }}
+          />
+        </div>
+        <button
+          onClick={() => setManualAbierto((v) => !v)}
+          aria-label={manualAbierto ? "Cerrar marca manual" : "Agregar una marca manual"}
+          title="Marca manual (sin foto)"
+          className={`flex-none w-14 rounded-2xl border-2 text-xl ${
+            manualAbierto ? "bg-[#0B5F6C] border-[#0B5F6C] text-white" : "bg-white border-[#1EA6B8] text-[#0B5F6C]"
+          }`}
+        >
+          ✏️
+        </button>
       </div>
 
       {mensaje && <p className="text-sm text-[#1E8A5F] font-semibold">{mensaje}</p>}
@@ -490,12 +500,6 @@ export default function PanelCapturar({ onGuardado }: { onGuardado?: () => void 
       )}
 
       <div className="pt-2 border-t border-[#DDE7E8]">
-        <button
-          onClick={() => setManualAbierto((v) => !v)}
-          className="text-[12px] font-bold text-[#0F7A8A] border border-dashed border-[#0F7A8A] rounded-lg px-3 py-2.5 w-full"
-        >
-          {manualAbierto ? "Cancelar" : "+ Agregar marca manual (sin foto)"}
-        </button>
         {manualAbierto && (
           <div className="mt-2 rounded-xl border border-[#DDE7E8] bg-white p-2.5 space-y-2">
             <select
