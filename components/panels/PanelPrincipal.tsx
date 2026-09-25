@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import PlanificarMes from "@/components/PlanificarMes";
 import PreguntaFeriados from "@/components/PreguntaFeriados";
-import Comentarios from "@/components/Comentarios";
+import ComentariosAsesora from "@/components/ComentariosAsesora";
 import CorregirHoras from "@/components/CorregirHoras";
 import { AsesorasQuitadas, FormMoverAsesora, NuevaAsesora, quitarAsesora } from "@/components/AsesoraAcciones";
 import {
@@ -15,7 +15,7 @@ import {
   type ResumenMes,
 } from "@/lib/asistencia";
 import { ahoraCR, aSetiembre } from "@/lib/tiempo";
-import type { Asesora, DiaEspecial, Feriado, Marca } from "@/lib/tipos";
+import type { Asesora, Comentario, DiaEspecial, Feriado, Marca } from "@/lib/tipos";
 
 const ESTILO: Record<EstatusDia, { etiqueta: string; letra: string; fondo: string; texto: string }> = {
   asistencia: { etiqueta: "Asistencia", letra: "A", fondo: "#1EA6B8", texto: "#FFFFFF" },
@@ -244,13 +244,13 @@ export default function PanelPrincipal({ recargar = 0, arriba, onMes }: { recarg
   const [marcas, setMarcas] = useState<Marca[]>([]);
   const [diasEspeciales, setDiasEspeciales] = useState<DiaEspecial[]>([]);
   const [feriados, setFeriados] = useState<Feriado[]>([]);
+  const [comentarios, setComentarios] = useState<Comentario[]>([]);
   const [feriadosConfirmados, setFeriadosConfirmados] = useState(false);
   const [cargando, setCargando] = useState(true);
   const [abierta, setAbierta] = useState<string | null>(null);
   const [moviendoId, setMoviendoId] = useState<string | null>(null);
   const [permisoAbiertoId, setPermisoAbiertoId] = useState<string | null>(null);
   const [seleccion, setSeleccion] = useState<Seleccion>(null);
-  const [refresco, setRefresco] = useState(0);
   const [mostrarNueva, setMostrarNueva] = useState(false);
   const [aviso, setAviso] = useState<string | null>(null);
   const [nuevoFeriadoFecha, setNuevoFeriadoFecha] = useState("");
@@ -265,12 +265,14 @@ export default function PanelPrincipal({ recargar = 0, arriba, onMes }: { recarg
   }, [mes]);
 
   async function cargar() {
-    const [rAsesoras, rMarcas, rDias, rFeriados] = await Promise.all([
+    const [rAsesoras, rMarcas, rDias, rFeriados, rComentarios] = await Promise.all([
       fetch("/api/asesoras").then((r) => r.json()),
       fetch(`/api/marcas?mes=${mes}`).then((r) => r.json()),
       fetch(`/api/dias-especiales?mes=${mes}`).then((r) => r.json()),
       fetch(`/api/feriados?mes=${mes}`).then((r) => r.json()),
+      fetch(`/api/comentarios?mes=${mes}`).then((r) => r.json()),
     ]);
+    setComentarios(rComentarios.comentarios ?? []);
     setAsesoras(rAsesoras.asesoras ?? []);
     setMarcas(rMarcas.marcas ?? []);
     setDiasEspeciales(rDias.dias ?? []);
@@ -452,7 +454,6 @@ export default function PanelPrincipal({ recargar = 0, arriba, onMes }: { recarg
 
   function recargarTodo() {
     void cargar();
-    setRefresco((v) => v + 1);
   }
 
   function mover(delta: 1 | -1) {
@@ -664,6 +665,11 @@ export default function PanelPrincipal({ recargar = 0, arriba, onMes }: { recarg
                       <div className="text-[13px] font-bold leading-snug break-words">
                         {f.asesora.nombre}
                         {!f.asesora.activo && <span className="ml-1.5 text-[10px] text-[#6B6D6E] font-semibold">(quitada)</span>}
+                        {comentarios.some((c) => c.asesora_id === f.asesora.id) && (
+                          <span className="ml-1.5 text-[10px] text-[#0F7A8A] font-bold" title="Tiene comentarios este mes">
+                            💬 {comentarios.filter((c) => c.asesora_id === f.asesora.id).length}
+                          </span>
+                        )}
                       </div>
                       {dDia && (dDia.entrada || dDia.salida) && (
                         <div className="text-[11.5px] tabular-nums text-[#3A3B3C] mt-0.5">
@@ -846,6 +852,14 @@ export default function PanelPrincipal({ recargar = 0, arriba, onMes }: { recarg
                         </>
                       )}
 
+                      <ComentariosAsesora
+                        asesoraId={f.asesora.id}
+                        mes={mes}
+                        fechaInicial={mes === hoy.slice(0, 7) ? hoy : `${mes}-01`}
+                        comentarios={comentarios.filter((c) => c.asesora_id === f.asesora.id)}
+                        onCambio={recargarTodo}
+                      />
+
                     </div>
                   )}
                 </div>
@@ -862,12 +876,29 @@ export default function PanelPrincipal({ recargar = 0, arriba, onMes }: { recarg
         </>
       )}
 
-      <Comentarios
-        key={`comentarios-${periodo === "dia" ? referencia : mes}`}
-        fecha={periodo === "dia" ? referencia : undefined}
-        mes={periodo === "dia" ? undefined : mes}
-        refresco={refresco}
-      />
+      {comentarios.some((c) => !c.asesora_id) && (
+        <div className="rounded-xl border border-[#DDE7E8] bg-white p-3 space-y-1.5">
+          <div className="text-[12px] font-bold text-[#0B5F6C]">Notas generales del mes (sin asesora)</div>
+          {comentarios
+            .filter((c) => !c.asesora_id)
+            .map((c) => (
+              <div key={c.id} className="flex items-start gap-2 rounded-lg bg-[#F2F8F9] px-2.5 py-1.5 text-[12px] leading-snug">
+                <span className="flex-1 min-w-0">
+                  <b className="text-[#0F7A8A]">{diaMes(c.fecha)}</b> · {c.asunto} — {c.situacion}
+                </span>
+                <button
+                  onClick={async () => {
+                    await fetch(`/api/comentarios?id=${c.id}`, { method: "DELETE" });
+                    await cargar();
+                  }}
+                  className="text-[#B23A3A] text-[11px] font-semibold flex-none"
+                >
+                  Quitar
+                </button>
+              </div>
+            ))}
+        </div>
+      )}
     </div>
   );
 }
