@@ -16,7 +16,7 @@ import {
 } from "@/lib/asistencia";
 import { ahoraCR, aSetiembre } from "@/lib/tiempo";
 import type { Asesora, Comentario, DiaEspecial, Feriado, Marca } from "@/lib/tipos";
-import { IconoComentario, IconoLapiz } from "@/components/Iconos";
+import { IconoCalendario, IconoComentario, IconoLapiz } from "@/components/Iconos";
 
 const ESTILO: Record<EstatusDia, { etiqueta: string; letra: string; fondo: string; texto: string }> = {
   asistencia: { etiqueta: "Asistencia", letra: "A", fondo: "#1EA6B8", texto: "#FFFFFF" },
@@ -31,23 +31,35 @@ const ESTILO: Record<EstatusDia, { etiqueta: string; letra: string; fondo: strin
   fuera: { etiqueta: "Aún no laboraba / ya no labora", letra: "–", fondo: "#FFFFFF", texto: "#9AA3A4" },
 };
 
-// Un solo color de acento para resaltar en el calendario (nada de colores por situacion): mas simple de leer.
+// Acento general de la app (botones, "hoy" en el calendario).
 const ACENTO = "#0B5F6C";
-const ACENTO_SUAVE = "#0B5F6C22";
-
-/** Si el dia tiene algo que contar en el calendario (marca, permiso, feriado, falta, etc.). */
-function diaConAlgo(d: DiaCalculado): boolean {
-  return d.estatus !== "pendiente" && d.estatus !== "fuera";
-}
 
 type Periodo = "dia" | "semana" | "mes";
 type Kpi = "ausencia" | "faltaMarca" | "jornadaIncompleta" | "incapacidad" | "vacaciones" | "libre";
 type Tono = "ok" | "warn" | "info";
 type FiltroDia = Kpi | "asistencia";
 
+// Un color por filtro (solo para el calendario y los chips de cada asesora, no para los 6 indicadores de arriba).
+const COLOR_FILTRO: Record<FiltroDia, { fondo: string; texto: string }> = {
+  asistencia: { fondo: "#1EA6B8", texto: "#FFFFFF" },
+  ausencia: { fondo: "#E5484D", texto: "#FFFFFF" },
+  libre: { fondo: "#8E9A9C", texto: "#FFFFFF" },
+  vacaciones: { fondo: "#0B5F6C", texto: "#FFFFFF" },
+  incapacidad: { fondo: "#7B61D6", texto: "#FFFFFF" },
+  faltaMarca: { fondo: "#F5B700", texto: "#3A2F00" },
+  jornadaIncompleta: { fondo: "#F0742A", texto: "#FFFFFF" },
+};
+const ORDEN_CATEGORIA: FiltroDia[] = ["ausencia", "faltaMarca", "jornadaIncompleta", "incapacidad", "vacaciones", "libre", "asistencia"];
+
 /** Si el dia cumple el filtro (los indicadores de arriba mas "asistencia", que solo existe en cada tarjeta). */
 function cumpleFiltro(filtro: FiltroDia, d: DiaCalculado, hoy: string): boolean {
   return filtro === "asistencia" ? d.estatus === "asistencia" || d.estatus === "enJornada" : cumple(filtro, d, hoy);
+}
+
+/** A que categoria (y por tanto que color) pertenece un dia; null si no hay nada que resaltar. */
+function categoriaDia(d: DiaCalculado, hoy: string): FiltroDia | null {
+  for (const id of ORDEN_CATEGORIA) if (cumpleFiltro(id, d, hoy)) return id;
+  return null;
 }
 
 // Botones-filtro del resumen de cada asesora, en este orden.
@@ -95,10 +107,6 @@ function lunesDe(iso: string): string {
 function tituloDia(iso: string): string {
   const t = aSetiembre(new Date(`${iso}T12:00:00`).toLocaleDateString("es-CR", { weekday: "long", day: "numeric", month: "long" }));
   return t.charAt(0).toUpperCase() + t.slice(1);
-}
-
-function diaCorto(iso: string): string {
-  return aSetiembre(new Date(`${iso}T12:00:00`).toLocaleDateString("es-CR", { weekday: "short", day: "numeric", month: "short" }));
 }
 
 function diaMes(iso: string): string {
@@ -198,9 +206,17 @@ function DetalleDia({
         <span className="flex-none rounded-full px-2.5 py-1 text-[11.5px] font-bold" style={{ background: estilo.fondo, color: estilo.texto }}>
           {estilo.etiqueta}
         </span>
-        <span className="text-[12px] leading-snug">{[detallePermiso, describirDia(dia)].filter(Boolean).join(" · ")}</span>
+        <span className="flex-1 min-w-0 text-[12px] leading-snug">{[detallePermiso, describirDia(dia)].filter(Boolean).join(" · ")}</span>
+        <button
+          onClick={() => setCorrigiendo((v) => !v)}
+          className="flex-none text-[#6B6D6E]"
+          title="Corregir horas de entrada y salida"
+          aria-label="Corregir horas de entrada y salida"
+        >
+          <IconoLapiz size={15} />
+        </button>
       </div>
-      {corrigiendo ? (
+      {corrigiendo && (
         <CorregirHoras
           asesoraId={fila.asesora.id}
           nombre={fila.asesora.nombre}
@@ -216,13 +232,6 @@ function DetalleDia({
           }}
           onCerrar={() => setCorrigiendo(false)}
         />
-      ) : (
-        <button
-          onClick={() => setCorrigiendo(true)}
-          className="w-full rounded-lg bg-[#0B5F6C] text-white py-2.5 text-[12.5px] font-semibold"
-        >
-          Corregir horas de entrada y salida
-        </button>
       )}
     </div>
   );
@@ -245,6 +254,7 @@ export default function PanelPrincipal({ recargar = 0, arriba, onMes }: { recarg
   const [abierta, setAbierta] = useState<string | null>(null);
   const [moviendoId, setMoviendoId] = useState<string | null>(null);
   const [permisoAbiertoId, setPermisoAbiertoId] = useState<string | null>(null);
+  const [editandoHoyId, setEditandoHoyId] = useState<string | null>(null); // pencil junto a la hora de hoy
   const [seleccion, setSeleccion] = useState<Seleccion>(null);
   const [mostrarNueva, setMostrarNueva] = useState(false);
   const [aviso, setAviso] = useState<string | null>(null);
@@ -445,13 +455,14 @@ export default function PanelPrincipal({ recargar = 0, arriba, onMes }: { recarg
         continue;
       }
       const { texto } = textoDia(f, d);
-      if (!texto || !diaConAlgo(d)) {
+      const cat = categoriaDia(d, hoy);
+      if (!texto || !cat) {
         previa = null;
         continue;
       }
       // Los permisos muestran su rango completo; se quita el "(día n de m)" porque la fila ya abarca varios días.
       const limpio = esPermiso ? texto.replace(/ \(día \d+ de \d+\)/, "") : texto;
-      previa = { fecha: d.fecha, fin: d.fecha, texto: limpio, color: ACENTO, estatus: d.estatus };
+      previa = { fecha: d.fecha, fin: d.fecha, texto: limpio, color: COLOR_FILTRO[cat].fondo, estatus: d.estatus };
       filas.push(previa);
     }
     return filas;
@@ -493,13 +504,6 @@ export default function PanelPrincipal({ recargar = 0, arriba, onMes }: { recarg
   function alternarTarjeta(f: FilaAsesora, expandida: boolean) {
     setAbierta(expandida ? null : f.asesora.id);
     setSeleccion(expandida ? null : { asesoraId: f.asesora.id, dia: idxDia + 1 });
-    setPermisoAbiertoId(null);
-    setMoviendoId(null);
-  }
-
-  function verDiaEnCalendario(f: FilaAsesora, dia: number) {
-    setAbierta(f.asesora.id);
-    setSeleccion({ asesoraId: f.asesora.id, dia });
     setPermisoAbiertoId(null);
     setMoviendoId(null);
   }
@@ -649,7 +653,6 @@ export default function PanelPrincipal({ recargar = 0, arriba, onMes }: { recarg
 
             {filasVisibles.map((f) => {
               const expandida = abierta === f.asesora.id;
-              const coincide = kpiActivo ? coincidencias.get(f.asesora.id)?.[kpiActivo] ?? [] : [];
               const filtroEfectivo: FiltroDia | null = f.asesora.id in filtroTarjeta ? filtroTarjeta[f.asesora.id] : kpiActivo;
               const dDia = mes === hoy.slice(0, 7) ? f.dias[idxDia] : undefined;
               const info = dDia ? textoDia(f, dDia) : null;
@@ -662,63 +665,99 @@ export default function PanelPrincipal({ recargar = 0, arriba, onMes }: { recarg
                     background: kpiActivo ? "#F3FDFE" : "#FFFFFF",
                   }}
                 >
-                  <div className="flex items-start gap-1.5 p-3 pb-2">
-                    <button onClick={() => alternarTarjeta(f, expandida)} className="flex-1 min-w-0 text-left">
-                      <div className="text-[13px] font-bold leading-snug break-words">
-                        {f.asesora.nombre}
-                        {!f.asesora.activo && <span className="ml-1.5 text-[10px] text-[#6B6D6E] font-semibold">(quitada)</span>}
-                        {comentarios.some((c) => c.asesora_id === f.asesora.id) && (
-                          <span className="ml-1.5 inline-flex items-center gap-0.5 text-[10px] text-[#0F7A8A] font-bold align-middle" title="Tiene comentarios este mes">
-                            <IconoComentario size={12} /> {comentarios.filter((c) => c.asesora_id === f.asesora.id).length}
+                  <div className="p-3 pb-2 space-y-1.5">
+                    <div className="flex items-start gap-1.5">
+                      <button onClick={() => alternarTarjeta(f, expandida)} className="flex-1 min-w-0 text-left">
+                        <div className="text-[13px] font-bold leading-snug break-words">
+                          {f.asesora.nombre}
+                          {!f.asesora.activo && <span className="ml-1.5 text-[10px] text-[#6B6D6E] font-semibold">(quitada)</span>}
+                          {comentarios.some((c) => c.asesora_id === f.asesora.id) && (
+                            <span className="ml-1.5 inline-flex items-center gap-0.5 text-[10px] text-[#0F7A8A] font-bold align-middle" title="Tiene comentarios este mes">
+                              <IconoComentario size={12} /> {comentarios.filter((c) => c.asesora_id === f.asesora.id).length}
+                            </span>
+                          )}
+                        </div>
+                        <div className="text-[11px] text-[#6B6D6E] mt-0.5">{f.asesora.punto}</div>
+                      </button>
+                      {f.asesora.activo && (
+                        <>
+                          <button
+                            onClick={() => setMoviendoId(moviendoId === f.asesora.id ? null : f.asesora.id)}
+                            className="flex-none rounded-lg border border-[#DDE7E8] bg-white text-[#0B5F6C] px-2.5 py-1.5 text-[11px] font-semibold"
+                          >
+                            Mover
+                          </button>
+                          <button
+                            onClick={async () => {
+                              const error = await quitarAsesora(f.asesora, setAviso);
+                              if (error === null) recargarTodo();
+                              else if (error !== "cancelado") setAviso(error);
+                            }}
+                            className="flex-none rounded-lg border border-[#DDE7E8] bg-white text-[#B23A3A] px-2.5 py-1.5 text-[11px] font-semibold"
+                          >
+                            Quitar
+                          </button>
+                        </>
+                      )}
+                      <button
+                        onClick={() => alternarTarjeta(f, expandida)}
+                        className="flex-none w-8 h-8 rounded-lg grid place-items-center"
+                        style={{ background: expandida ? ACENTO : "#E4F7F9", color: expandida ? "#FFFFFF" : "#0B5F6C" }}
+                        aria-label={expandida ? "Ocultar el calendario" : "Mostrar el calendario"}
+                      >
+                        <IconoCalendario size={16} />
+                      </button>
+                    </div>
+
+                    {/* Hora de hoy, siempre a la vista, con lapiz para corregirla ahi mismo */}
+                    {dDia && (
+                      <div className="flex items-center flex-wrap gap-1.5">
+                        <span className="text-[11.5px] tabular-nums text-[#3A3B3C]">
+                          Entrada {dDia.entrada ?? "—"} · Salida {dDia.salida ?? "—"}
+                        </span>
+                        {f.asesora.activo && (
+                          <button
+                            onClick={() => setEditandoHoyId(editandoHoyId === f.asesora.id ? null : f.asesora.id)}
+                            className="text-[#6B6D6E]"
+                            title="Corregir la hora de hoy"
+                            aria-label={`Corregir la hora de hoy de ${f.asesora.nombre}`}
+                          >
+                            <IconoLapiz size={13} />
+                          </button>
+                        )}
+                        {info && info.texto && (
+                          <span
+                            className={`text-[10.5px] font-bold px-2 py-0.5 rounded-full ${
+                              info.tono === "ok"
+                                ? "bg-[#E7F5EE] text-[#1E8A5F]"
+                                : info.tono === "warn"
+                                ? "bg-[#35DCEC] text-[#0B3A41]"
+                                : "bg-[#E4F7F9] text-[#0B5F6C]"
+                            }`}
+                          >
+                            {info.texto}
                           </span>
                         )}
                       </div>
-                      {dDia && (dDia.entrada || dDia.salida) && (
-                        <div className="text-[11.5px] tabular-nums text-[#3A3B3C] mt-0.5">
-                          Entrada {dDia.entrada ?? "—"} · Salida {dDia.salida ?? "—"}
-                        </div>
-                      )}
-                      {info && info.texto && (
-                        <span
-                          className={`inline-block mt-1.5 text-[10.5px] font-bold px-2 py-0.5 rounded-full ${
-                            info.tono === "ok"
-                              ? "bg-[#E7F5EE] text-[#1E8A5F]"
-                              : info.tono === "warn"
-                              ? "bg-[#35DCEC] text-[#0B3A41]"
-                              : "bg-[#E4F7F9] text-[#0B5F6C]"
-                          }`}
-                        >
-                          {info.texto}
-                        </span>
-                      )}
-                    </button>
-                    {f.asesora.activo && (
-                      <>
-                        <button
-                          onClick={() => setMoviendoId(moviendoId === f.asesora.id ? null : f.asesora.id)}
-                          className="flex-none rounded-lg border border-[#DDE7E8] bg-white text-[#0B5F6C] px-2.5 py-1.5 text-[11px] font-semibold"
-                        >
-                          Mover
-                        </button>
-                        <button
-                          onClick={async () => {
-                            const error = await quitarAsesora(f.asesora, setAviso);
-                            if (error === null) recargarTodo();
-                            else if (error !== "cancelado") setAviso(error);
-                          }}
-                          className="flex-none rounded-lg border border-[#DDE7E8] bg-white text-[#B23A3A] px-2.5 py-1.5 text-[11px] font-semibold"
-                        >
-                          Quitar
-                        </button>
-                      </>
                     )}
-                    <button
-                      onClick={() => alternarTarjeta(f, expandida)}
-                      className="flex-none w-8 h-8 rounded-lg bg-[#E4F7F9] text-[#0B5F6C] font-bold"
-                      aria-label={expandida ? "Cerrar el calendario" : "Abrir el calendario"}
-                    >
-                      {expandida ? "−" : "+"}
-                    </button>
+
+                    {editandoHoyId === f.asesora.id && dDia && (
+                      <CorregirHoras
+                        asesoraId={f.asesora.id}
+                        nombre={f.asesora.nombre}
+                        fecha={hoy}
+                        entrada={dDia.entrada}
+                        salida={dDia.salida}
+                        entradaOriginal={dDia.entradaOriginal}
+                        salidaOriginal={dDia.salidaOriginal}
+                        motivoPrevio={dDia.motivoCorreccion}
+                        onGuardado={() => {
+                          setEditandoHoyId(null);
+                          recargarTodo();
+                        }}
+                        onCerrar={() => setEditandoHoyId(null)}
+                      />
+                    )}
                   </div>
 
                   {moviendoId === f.asesora.id && (
@@ -728,31 +767,10 @@ export default function PanelPrincipal({ recargar = 0, arriba, onMes }: { recarg
                   )}
                   <div className="pb-1" />
 
-                  {/* Semana o mes: detalle de lo que cumple el indicador elegido */}
-                  {kpiActivo && coincide.length > 0 && (
-                    <div className="px-3 pb-3 space-y-1.5">
-                      {coincide.slice(0, 5).map((d) => (
-                        <div key={d.fecha} className="flex items-center gap-2 rounded-lg bg-white border border-[#CFF0F3] px-2.5 py-1.5">
-                          <div className="flex-1 min-w-0 text-[11.5px] leading-snug">
-                            <b>{diaCorto(d.fecha)}</b> · {describirDia(d) || ESTILO[d.estatus].etiqueta}
-                          </div>
-                          <button
-                            onClick={() => verDiaEnCalendario(f, d.dia)}
-                            className="flex-none rounded-lg bg-[#0B5F6C] text-white px-2.5 py-1 text-[11px] font-semibold"
-                          >
-                            Ver en el calendario
-                          </button>
-                        </div>
-                      ))}
-                      {coincide.length > 5 && <div className="text-[11px] text-[#6B6D6E]">y {coincide.length - 5} día(s) más — abre la tarjeta para verlos.</div>}
-                    </div>
-                  )}
-
                   {expandida && (
                     <div className="border-t border-[#DDE7E8] p-3 space-y-2.5 bg-[#F8FBFB]">
-                      <div className="flex items-center gap-2">
-                        <div className="flex-1 min-w-0 text-[11.5px] text-[#6B6D6E]">{f.asesora.punto}</div>
-                        {f.asesora.activo && permisoAbiertoId !== f.asesora.id && (
+                      {f.asesora.activo && permisoAbiertoId !== f.asesora.id && (
+                        <div className="flex justify-end">
                           <button
                             onClick={() => {
                               setPermisoAbiertoId(f.asesora.id);
@@ -764,25 +782,27 @@ export default function PanelPrincipal({ recargar = 0, arriba, onMes }: { recarg
                           >
                             <IconoLapiz size={14} /> Editar calendario
                           </button>
-                        )}
-                      </div>
+                        </div>
+                      )}
                       <div className="flex flex-wrap gap-1.5 text-[11px] font-bold">
                         {FILTROS_TARJETA.map((fl) => {
                           const n = f.dias.filter((d) => cumpleFiltro(fl.id, d, hoy)).length;
                           if (n === 0 && fl.id !== "asistencia") return null;
                           const activo = filtroEfectivo === fl.id;
+                          const col = COLOR_FILTRO[fl.id];
                           return (
                             <button
                               key={fl.id}
                               onClick={() => setFiltroTarjeta((m) => ({ ...m, [f.asesora.id]: activo ? null : fl.id }))}
                               aria-pressed={activo}
-                              className="rounded-lg px-2 py-1"
+                              className="flex items-center gap-1.5 rounded-lg px-2 py-1"
                               style={{
-                                background: activo ? ACENTO : "#FFFFFF",
-                                color: activo ? "#FFFFFF" : "#3A3B3C",
-                                border: `1.5px solid ${activo ? ACENTO : "#DDE7E8"}`,
+                                background: activo ? col.fondo : "#FFFFFF",
+                                color: activo ? col.texto : "#3A3B3C",
+                                border: `1.5px solid ${activo ? col.fondo : "#DDE7E8"}`,
                               }}
                             >
+                              <span className="inline-block w-2 h-2 rounded-sm" style={{ background: col.fondo, boxShadow: activo ? "0 0 0 1px #FFFFFF" : "none" }} />
                               {n} {fl.etiqueta}
                             </button>
                           );
@@ -829,25 +849,28 @@ export default function PanelPrincipal({ recargar = 0, arriba, onMes }: { recarg
                                 </div>
                               ))}
                               {f.dias.map((d) => {
-                                const conAlgo = diaConAlgo(d);
+                                const cat = categoriaDia(d, hoy);
+                                const col = cat ? COLOR_FILTRO[cat] : null;
                                 const sel = seleccion?.asesoraId === f.asesora.id && seleccion.dia === d.dia;
                                 const esHoy = d.fecha === hoy;
-                                // Sin filtro: plano, solo un fondo tenue si hubo algo ese dia. Con filtro: solo se resaltan sus dias.
+                                // Sin filtro: cada dia con su color tenue segun su situacion. Con un filtro elegido, solo esos dias se ven a todo color.
                                 const resaltado = filtroEfectivo ? cumpleFiltro(filtroEfectivo, d, hoy) : false;
+                                const atenuado = !!filtroEfectivo && !resaltado;
                                 return (
                                   <button
                                     key={d.dia}
                                     onClick={() => setSeleccion(sel ? null : { asesoraId: f.asesora.id, dia: d.dia })}
-                                    className="aspect-square relative grid place-items-center"
+                                    className="aspect-square relative grid place-items-center transition-opacity"
+                                    style={{ opacity: atenuado ? 0.35 : 1 }}
                                     aria-label={`Día ${d.dia}${esHoy ? " (hoy)" : ""}: ${ESTILO[d.estatus].etiqueta}`}
                                   >
                                     <span
                                       className="w-[26px] h-[26px] grid place-items-center rounded-md text-[12.5px]"
                                       style={{
-                                        background: resaltado ? ACENTO : esHoy ? ACENTO : conAlgo ? ACENTO_SUAVE : "transparent",
-                                        color: resaltado || esHoy ? "#FFFFFF" : "#1C1C1E",
+                                        background: resaltado && col ? col.fondo : col ? `${col.fondo}26` : "transparent",
+                                        color: resaltado && col ? col.texto : "#1C1C1E",
                                         fontWeight: resaltado || esHoy ? 700 : 500,
-                                        boxShadow: sel ? "0 0 0 2px #0B3A41" : "none",
+                                        boxShadow: sel ? "0 0 0 2px #0B3A41" : esHoy ? `inset 0 0 0 2px ${ACENTO}` : "none",
                                       }}
                                     >
                                       {d.dia}
