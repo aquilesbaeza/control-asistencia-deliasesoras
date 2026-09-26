@@ -32,6 +32,7 @@ export type DiaEspecial = {
   fecha: string;
   tipo: TipoDiaEspecial;
   nota: string | null;
+  comprobante_url?: string | null; // foto del comprobante de incapacidad, guardada para consultarla despues
   creado_en: string;
 };
 

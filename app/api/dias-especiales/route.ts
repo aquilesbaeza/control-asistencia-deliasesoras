@@ -39,13 +39,14 @@ export async function GET(req: NextRequest) {
 // Crea o reemplaza el estatus manual de un dia, o de un rango (fecha_desde..fecha_hasta).
 export async function POST(req: NextRequest) {
   const body = await req.json();
-  const { asesora_id, fecha, fecha_desde, fecha_hasta, tipo, nota } = body as {
+  const { asesora_id, fecha, fecha_desde, fecha_hasta, tipo, nota, comprobante_url } = body as {
     asesora_id?: string;
     fecha?: string;
     fecha_desde?: string;
     fecha_hasta?: string;
     tipo?: string;
     nota?: string;
+    comprobante_url?: string;
   };
 
   const desde = fecha_desde ?? fecha;
@@ -87,7 +88,7 @@ export async function POST(req: NextRequest) {
   const { data, error } = await supabase
     .from("dias_especiales")
     .upsert(
-      fechasAGuardar.map((f) => ({ asesora_id, fecha: f, tipo, nota: nota || null })),
+      fechasAGuardar.map((f) => ({ asesora_id, fecha: f, tipo, nota: nota || null, comprobante_url: comprobante_url || null })),
       { onConflict: "asesora_id,fecha" }
     )
     .select();

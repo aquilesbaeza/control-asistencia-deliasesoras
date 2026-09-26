@@ -310,7 +310,7 @@ export default function PanelPrincipal({ recargar = 0, arriba, onMes }: { recarg
   const [permisoTipo, setPermisoTipo] = useState<TipoPermiso>("libre");
   const [permisoInicial, setPermisoInicial] = useState<Record<string, TipoPermiso | null>>({});
   const [permisoSel, setPermisoSel] = useState<Record<string, TipoPermiso | null>>({});
-  const [permisoCodigo, setPermisoCodigo] = useState("");
+  const [permisoComprobanteUrl, setPermisoComprobanteUrl] = useState<string | null>(null);
   const [permisoNota, setPermisoNota] = useState("");
   const [permisoRangoFoto, setPermisoRangoFoto] = useState<{ desde: string; hasta: string } | null>(null);
   const [permisoLeyendo, setPermisoLeyendo] = useState(false);
@@ -590,7 +590,7 @@ export default function PanelPrincipal({ recargar = 0, arriba, onMes }: { recarg
     setPermisoInicial(inicial);
     setPermisoSel(inicial);
     setPermisoTipo("libre");
-    setPermisoCodigo("");
+    setPermisoComprobanteUrl(null);
     setPermisoNota("");
     setPermisoRangoFoto(null);
     setPermisoMensaje(null);
@@ -613,27 +613,34 @@ export default function PanelPrincipal({ recargar = 0, arriba, onMes }: { recarg
     setPermisoSel((s) => ({ ...s, [fecha]: s[fecha] === permisoTipo ? null : permisoTipo }));
   }
 
-  async function leerComprobantePermiso(file: File) {
+  async function leerComprobantePermiso(file: File, asesoraId: string) {
     setPermisoError(null);
     setPermisoMensaje(null);
     setPermisoLeyendo(true);
     try {
       const { base64, mediaType } = await fotoReducida(file);
-      const resp = await fetch("/api/incapacidad/ocr", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ imagenBase64: base64, mediaType }),
-      });
-      const data = await resp.json();
-      if (!resp.ok) throw new Error(data.error);
-      const l = data.lectura as { codigo: string | null; desde: string | null; hasta: string | null; nombre_detectado: string | null };
-      if (!l.desde && !l.codigo) {
-        setPermisoError("No pude leer el comprobante. Marca los días a mano y escribe el código, por favor.");
-        return;
-      }
+      // Se sube la foto (queda guardada para consultarla despues) y se lee la fecha en paralelo.
+      const [subida, lectura] = await Promise.all([
+        fetch("/api/incapacidad/comprobante", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ imagenBase64: base64, mediaType, asesoraId, fecha: hoy }),
+        }).then(async (r) => ({ ok: r.ok, data: await r.json() })),
+        fetch("/api/incapacidad/ocr", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ imagenBase64: base64, mediaType }),
+        }).then(async (r) => ({ ok: r.ok, data: await r.json() })),
+      ]);
+
+      if (subida.ok) setPermisoComprobanteUrl(subida.data.url);
+      else setPermisoError(subida.data.error ?? "No se pudo guardar la foto del comprobante");
+
+      const l = lectura.ok
+        ? (lectura.data.lectura as { desde: string | null; hasta: string | null; nombre_detectado: string | null })
+        : null;
       setPermisoTipo("incapacidad");
-      if (l.codigo) setPermisoCodigo(l.codigo);
-      if (l.desde && l.hasta) {
+      if (l?.desde && l?.hasta) {
         setPermisoRangoFoto({ desde: l.desde, hasta: l.hasta });
         setPermisoSel((s) => {
           const n = { ...s };
@@ -642,11 +649,15 @@ export default function PanelPrincipal({ recargar = 0, arriba, onMes }: { recarg
         });
       }
       const partes = [
-        l.codigo ? `código ${l.codigo}` : null,
-        l.desde && l.hasta ? `del ${diaMes(l.desde)} al ${diaMes(l.hasta)}` : null,
-        l.nombre_detectado ? `a nombre de ${l.nombre_detectado}` : null,
+        subida.ok ? "foto guardada" : null,
+        l?.desde && l?.hasta ? `del ${diaMes(l.desde)} al ${diaMes(l.hasta)}` : null,
+        l?.nombre_detectado ? `a nombre de ${l.nombre_detectado}` : null,
       ];
-      setPermisoMensaje(`Leí: ${partes.filter(Boolean).join(" · ")}. Revísalo y corrige lo que haga falta antes de guardar.`);
+      if (partes.some(Boolean)) {
+        setPermisoMensaje(`Listo: ${partes.filter(Boolean).join(" · ")}. Revisa los días en el calendario antes de guardar.`);
+      } else if (subida.ok) {
+        setPermisoMensaje("No pude leer las fechas del comprobante; marca los días a mano en el calendario.");
+      }
     } catch (err) {
       setPermisoError(err instanceof Error ? err.message : "No se pudo leer el comprobante");
     } finally {
@@ -673,15 +684,19 @@ export default function PanelPrincipal({ recargar = 0, arriba, onMes }: { recarg
           for (let fx = permisoRangoFoto.desde; fx <= permisoRangoFoto.hasta; fx = sumarDias(fx, 1)) if (!lista.includes(fx)) lista.push(fx);
         }
         if (lista.length === 0) continue;
-        const textoNota =
-          tipo === "incapacidad"
-            ? [permisoCodigo.trim() ? `Comprobante ${permisoCodigo.trim()}` : null, permisoNota.trim() || null].filter(Boolean).join(" · ") || null
-            : permisoNota.trim() || null;
+        const textoNota = permisoNota.trim() || null;
         for (const [d, h] of tramos(lista)) {
           const r = await fetch("/api/dias-especiales", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ asesora_id: f.asesora.id, tipo, fecha_desde: d, fecha_hasta: h, nota: textoNota }),
+            body: JSON.stringify({
+              asesora_id: f.asesora.id,
+              tipo,
+              fecha_desde: d,
+              fecha_hasta: h,
+              nota: textoNota,
+              comprobante_url: tipo === "incapacidad" ? permisoComprobanteUrl : undefined,
+            }),
           });
           if (!r.ok) throw new Error((await r.json()).error ?? "No se pudo guardar");
           if (tipo !== "libre") {
@@ -1234,16 +1249,11 @@ export default function PanelPrincipal({ recargar = 0, arriba, onMes }: { recarg
                                     className="hidden"
                                     onChange={(e) => {
                                       const file = e.target.files?.[0];
-                                      if (file) void leerComprobantePermiso(file);
+                                      if (file) void leerComprobantePermiso(file, f.asesora.id);
                                       e.target.value = "";
                                     }}
                                   />
-                                  <input
-                                    value={permisoCodigo}
-                                    onChange={(e) => setPermisoCodigo(e.target.value)}
-                                    placeholder="Código del comprobante (se llena solo con la foto)"
-                                    className="w-full rounded-lg border border-[#DDE7E8] bg-white p-2.5 text-[13px]"
-                                  />
+                                  {permisoComprobanteUrl && <p className="text-[11px] text-[#1E8A5F] font-semibold">✓ Foto del comprobante guardada</p>}
                                 </div>
                               )}
 
@@ -1276,6 +1286,7 @@ export default function PanelPrincipal({ recargar = 0, arriba, onMes }: { recarg
                             <>
                               {filaSel && diaSel && seleccion?.asesoraId === f.asesora.id && (
                                 <DetalleDia
+                                  key={`${diaSel.fecha}-${filaSel.asesora.id}`}
                                   fila={filaSel}
                                   dia={diaSel}
                                   detallePermiso={detallePermiso(filaSel, diaSel)}

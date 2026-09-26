@@ -69,12 +69,21 @@ export default function EditorPermiso({
   const [desde, setDesde] = useState(desdeInicial ?? fecha);
   const [hasta, setHasta] = useState(hastaInicial ?? fecha);
   const [nota, setNota] = useState(notaInicial ?? "");
-  const [codigo, setCodigo] = useState("");
+  const [comprobanteUrl, setComprobanteUrl] = useState<string | null>(null);
   const [leyendo, setLeyendo] = useState(false);
   const [guardando, setGuardando] = useState(false);
   const [mensaje, setMensaje] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const inputFoto = useRef<HTMLInputElement>(null);
+
+  // Libre es siempre de un solo dia; solo vacaciones e incapacidad piden un rango.
+  function elegirTipo(t: TipoPermiso) {
+    setTipo(t);
+    if (t === "libre") {
+      setDesde(fecha);
+      setHasta(fecha);
+    }
+  }
 
   async function leerComprobante(file: File) {
     setError(null);
@@ -82,27 +91,33 @@ export default function EditorPermiso({
     setLeyendo(true);
     try {
       const { base64, mediaType } = await fotoReducida(file);
-      const resp = await fetch("/api/incapacidad/ocr", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ imagenBase64: base64, mediaType }),
-      });
-      const data = await resp.json();
-      if (!resp.ok) throw new Error(data.error);
-      const l = data.lectura as { codigo: string | null; desde: string | null; hasta: string | null; nombre_detectado: string | null };
-      if (!l.desde && !l.codigo) {
-        setError("No pude leer el comprobante. Escribe las fechas y el código a mano, por favor.");
-        return;
-      }
-      if (l.codigo) setCodigo(l.codigo);
-      if (l.desde) setDesde(l.desde);
-      if (l.hasta) setHasta(l.hasta);
+      // Se sube la foto (queda guardada para consultarla despues) y se lee la fecha en paralelo.
+      const [subida, lectura] = await Promise.all([
+        fetch("/api/incapacidad/comprobante", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ imagenBase64: base64, mediaType, asesoraId, fecha }),
+        }).then(async (r) => ({ ok: r.ok, data: await r.json() })),
+        fetch("/api/incapacidad/ocr", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ imagenBase64: base64, mediaType }),
+        }).then(async (r) => ({ ok: r.ok, data: await r.json() })),
+      ]);
+
+      if (subida.ok) setComprobanteUrl(subida.data.url);
+      else setError(subida.data.error ?? "No se pudo guardar la foto del comprobante");
+
+      const l = lectura.ok ? (lectura.data.lectura as { desde: string | null; hasta: string | null; nombre_detectado: string | null }) : null;
+      if (l?.desde) setDesde(l.desde);
+      if (l?.hasta) setHasta(l.hasta);
       const partes = [
-        l.codigo ? `código ${l.codigo}` : null,
-        l.desde && l.hasta ? `del ${corto(l.desde)} al ${corto(l.hasta)}` : null,
-        l.nombre_detectado ? `a nombre de ${l.nombre_detectado}` : null,
+        subida.ok ? "foto guardada" : null,
+        l?.desde && l?.hasta ? `del ${corto(l.desde)} al ${corto(l.hasta)}` : null,
+        l?.nombre_detectado ? `a nombre de ${l.nombre_detectado}` : null,
       ];
-      setMensaje(`Leí: ${partes.filter(Boolean).join(" · ")}. Revísalo antes de guardar.`);
+      if (partes.some(Boolean)) setMensaje(`Listo: ${partes.filter(Boolean).join(" · ")}. Revisa las fechas antes de guardar.`);
+      else if (subida.ok) setMensaje("No pude leer las fechas del comprobante; revísalas a mano.");
     } catch (err) {
       setError(err instanceof Error ? err.message : "No se pudo leer el comprobante");
     } finally {
@@ -119,14 +134,18 @@ export default function EditorPermiso({
     }
     setGuardando(true);
     try {
-      const textoNota =
-        tipo === "incapacidad"
-          ? [codigo.trim() ? `Comprobante ${codigo.trim()}` : null, nota.trim() || null].filter(Boolean).join(" · ") || null
-          : nota.trim() || null;
+      const textoNota = nota.trim() || null;
       const r = await fetch("/api/dias-especiales", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ asesora_id: asesoraId, tipo, fecha_desde: desde, fecha_hasta: hasta, nota: textoNota }),
+        body: JSON.stringify({
+          asesora_id: asesoraId,
+          tipo,
+          fecha_desde: desde,
+          fecha_hasta: hasta,
+          nota: textoNota,
+          comprobante_url: tipo === "incapacidad" ? comprobanteUrl : undefined,
+        }),
       });
       const data = await r.json();
       if (!r.ok) throw new Error(data.error ?? "No se pudo guardar");
@@ -179,7 +198,7 @@ export default function EditorPermiso({
           return (
             <button
               key={t.id}
-              onClick={() => setTipo(t.id)}
+              onClick={() => elegirTipo(t.id)}
               className="rounded-lg py-2 text-[12px] font-bold"
               style={{ background: activo ? t.fondo : "#F2F8F9", color: activo ? t.texto : "#3A3B3C" }}
             >
@@ -189,33 +208,39 @@ export default function EditorPermiso({
         })}
       </div>
 
-      <div className="grid grid-cols-2 gap-2">
-        <label className="text-[10.5px] font-bold text-[#6B6D6E] uppercase tracking-wide">
-          Desde
-          <input
-            type="date"
-            value={desde}
-            onChange={(e) => {
-              setDesde(e.target.value);
-              if (hasta < e.target.value) setHasta(e.target.value);
-            }}
-            className="mt-1 w-full rounded-lg border border-[#DDE7E8] p-2 text-[13px] normal-case font-normal text-[#14181A]"
-          />
-        </label>
-        <label className="text-[10.5px] font-bold text-[#6B6D6E] uppercase tracking-wide">
-          Hasta
-          <input
-            type="date"
-            value={hasta}
-            min={desde}
-            onChange={(e) => setHasta(e.target.value)}
-            className="mt-1 w-full rounded-lg border border-[#DDE7E8] p-2 text-[13px] normal-case font-normal text-[#14181A]"
-          />
-        </label>
-      </div>
-      <p className="text-[11.5px] font-semibold text-[#0B5F6C]">
-        {desde === hasta ? `Un día: ${corto(desde)}` : `Del ${corto(desde)} al ${corto(hasta)}`}
-      </p>
+      {tipo === "libre" ? (
+        <p className="text-[11.5px] font-semibold text-[#0B5F6C]">Libre es de un solo día: {corto(fecha)}.</p>
+      ) : (
+        <>
+          <div className="grid grid-cols-2 gap-2">
+            <label className="text-[10.5px] font-bold text-[#6B6D6E] uppercase tracking-wide">
+              Desde
+              <input
+                type="date"
+                value={desde}
+                onChange={(e) => {
+                  setDesde(e.target.value);
+                  if (hasta < e.target.value) setHasta(e.target.value);
+                }}
+                className="mt-1 w-full rounded-lg border border-[#DDE7E8] p-2 text-[13px] normal-case font-normal text-[#14181A]"
+              />
+            </label>
+            <label className="text-[10.5px] font-bold text-[#6B6D6E] uppercase tracking-wide">
+              Hasta
+              <input
+                type="date"
+                value={hasta}
+                min={desde}
+                onChange={(e) => setHasta(e.target.value)}
+                className="mt-1 w-full rounded-lg border border-[#DDE7E8] p-2 text-[13px] normal-case font-normal text-[#14181A]"
+              />
+            </label>
+          </div>
+          <p className="text-[11.5px] font-semibold text-[#0B5F6C]">
+            {desde === hasta ? `Un día: ${corto(desde)}` : `Del ${corto(desde)} al ${corto(hasta)}`}
+          </p>
+        </>
+      )}
 
       {tipo === "incapacidad" && (
         <div className="rounded-lg bg-[#F2F8F9] p-2.5 space-y-2">
@@ -237,12 +262,7 @@ export default function EditorPermiso({
               e.target.value = "";
             }}
           />
-          <input
-            value={codigo}
-            onChange={(e) => setCodigo(e.target.value)}
-            placeholder="Código del comprobante"
-            className="w-full rounded-lg border border-[#DDE7E8] bg-white p-2.5 text-[13px]"
-          />
+          {comprobanteUrl && <p className="text-[11px] text-[#1E8A5F] font-semibold">✓ Foto del comprobante guardada</p>}
         </div>
       )}
 
