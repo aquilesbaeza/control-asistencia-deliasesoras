@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import PlanificarMes from "@/components/PlanificarMes";
 import PreguntaFeriados from "@/components/PreguntaFeriados";
 import ComentariosAsesora, { type FilaDetalle } from "@/components/ComentariosAsesora";
 import CorregirHoras from "@/components/CorregirHoras";
@@ -16,7 +15,7 @@ import {
 } from "@/lib/asistencia";
 import { ahoraCR, aSetiembre } from "@/lib/tiempo";
 import type { Asesora, Comentario, DiaEspecial, Feriado, Marca } from "@/lib/tipos";
-import { IconoCalendario, IconoComentario, IconoLapiz } from "@/components/Iconos";
+import { IconoCalendario, IconoComentario, IconoDocumento, IconoLapiz } from "@/components/Iconos";
 
 const ESTILO: Record<EstatusDia, { etiqueta: string; letra: string; fondo: string; texto: string }> = {
   asistencia: { etiqueta: "Asistencia", letra: "A", fondo: "#1EA6B8", texto: "#FFFFFF" },
@@ -111,6 +110,42 @@ function tituloDia(iso: string): string {
 
 function diaMes(iso: string): string {
   return `${Number(iso.split("-")[2])}/${Number(iso.split("-")[1])}`;
+}
+
+type TipoPermiso = "libre" | "vacaciones" | "incapacidad";
+
+/** Agrupa fechas en tramos de dias consecutivos (para mandar rangos, no dia por dia). */
+function tramos(fechas: string[]): [string, string][] {
+  const orden = [...fechas].sort();
+  const r: [string, string][] = [];
+  for (const f of orden) {
+    const ultimo = r[r.length - 1];
+    if (ultimo && sumarDias(ultimo[1], 1) === f) ultimo[1] = f;
+    else r.push([f, f]);
+  }
+  return r;
+}
+
+/** Reduce la foto del comprobante (las de celular son enormes) antes de mandarla a leer. */
+function fotoReducida(file: File): Promise<{ base64: string; mediaType: string }> {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+      const escala = Math.min(1, 1800 / Math.max(img.width, img.height));
+      const canvas = document.createElement("canvas");
+      canvas.width = Math.round(img.width * escala);
+      canvas.height = Math.round(img.height * escala);
+      canvas.getContext("2d")?.drawImage(img, 0, 0, canvas.width, canvas.height);
+      URL.revokeObjectURL(url);
+      resolve({ base64: canvas.toDataURL("image/jpeg", 0.85).split(",")[1], mediaType: "image/jpeg" });
+    };
+    img.onerror = () => {
+      URL.revokeObjectURL(url);
+      reject(new Error("No pude abrir esa imagen"));
+    };
+    img.src = url;
+  });
 }
 
 function rangoDePeriodo(periodo: Periodo, ref: string, mes: string, totalDias: number): { desde: string; hasta: string } {
@@ -253,7 +288,18 @@ export default function PanelPrincipal({ recargar = 0, arriba, onMes }: { recarg
   const [cargando, setCargando] = useState(true);
   const [abierta, setAbierta] = useState<string | null>(null);
   const [moviendoId, setMoviendoId] = useState<string | null>(null);
-  const [permisoAbiertoId, setPermisoAbiertoId] = useState<string | null>(null);
+  const [permisoAbiertoId, setPermisoAbiertoId] = useState<string | null>(null); // asesora cuyo calendario se esta editando (libre/vacaciones/incapacidad)
+  const [permisoTipo, setPermisoTipo] = useState<TipoPermiso>("libre");
+  const [permisoInicial, setPermisoInicial] = useState<Record<string, TipoPermiso | null>>({});
+  const [permisoSel, setPermisoSel] = useState<Record<string, TipoPermiso | null>>({});
+  const [permisoCodigo, setPermisoCodigo] = useState("");
+  const [permisoNota, setPermisoNota] = useState("");
+  const [permisoRangoFoto, setPermisoRangoFoto] = useState<{ desde: string; hasta: string } | null>(null);
+  const [permisoLeyendo, setPermisoLeyendo] = useState(false);
+  const [permisoGuardando, setPermisoGuardando] = useState(false);
+  const [permisoMensaje, setPermisoMensaje] = useState<string | null>(null);
+  const [permisoError, setPermisoError] = useState<string | null>(null);
+  const permisoInputRef = useRef<HTMLInputElement>(null);
   const [editandoHoyId, setEditandoHoyId] = useState<string | null>(null); // pencil junto a la hora de hoy
   const [seleccion, setSeleccion] = useState<Seleccion>(null);
   const [mostrarNueva, setMostrarNueva] = useState(false);
@@ -508,6 +554,132 @@ export default function PanelPrincipal({ recargar = 0, arriba, onMes }: { recarg
     setMoviendoId(null);
   }
 
+  // Libres, vacaciones e incapacidades se editan en el MISMO calendario (sin abrir uno aparte):
+  // este modo hace que tocar un dia lo marque/desmarque con el tipo elegido, en vez de abrir el detalle de horas.
+  function abrirEdicionPermisos(f: FilaAsesora) {
+    const inicial: Record<string, TipoPermiso | null> = {};
+    for (const d of diasEspeciales) {
+      if (d.asesora_id !== f.asesora.id) continue;
+      if (d.tipo === "libre" || d.tipo === "vacaciones" || d.tipo === "incapacidad") inicial[d.fecha] = d.tipo;
+    }
+    setPermisoInicial(inicial);
+    setPermisoSel(inicial);
+    setPermisoTipo("libre");
+    setPermisoCodigo("");
+    setPermisoNota("");
+    setPermisoRangoFoto(null);
+    setPermisoMensaje(null);
+    setPermisoError(null);
+    setPermisoAbiertoId(f.asesora.id);
+    setSeleccion(null);
+    setEditandoHoyId(null);
+    setMoviendoId(null);
+  }
+
+  function cerrarEdicionPermisos() {
+    setPermisoAbiertoId(null);
+  }
+
+  function alternarDiaPermiso(f: FilaAsesora, fecha: string) {
+    const esAusenciaManual = diasEspeciales.some((d) => d.asesora_id === f.asesora.id && d.fecha === fecha && d.tipo === "ausencia");
+    if (esAusenciaManual) return;
+    setPermisoSel((s) => ({ ...s, [fecha]: s[fecha] === permisoTipo ? null : permisoTipo }));
+  }
+
+  async function leerComprobantePermiso(file: File) {
+    setPermisoError(null);
+    setPermisoMensaje(null);
+    setPermisoLeyendo(true);
+    try {
+      const { base64, mediaType } = await fotoReducida(file);
+      const resp = await fetch("/api/incapacidad/ocr", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ imagenBase64: base64, mediaType }),
+      });
+      const data = await resp.json();
+      if (!resp.ok) throw new Error(data.error);
+      const l = data.lectura as { codigo: string | null; desde: string | null; hasta: string | null; nombre_detectado: string | null };
+      if (!l.desde && !l.codigo) {
+        setPermisoError("No pude leer el comprobante. Marca los días a mano y escribe el código, por favor.");
+        return;
+      }
+      setPermisoTipo("incapacidad");
+      if (l.codigo) setPermisoCodigo(l.codigo);
+      if (l.desde && l.hasta) {
+        setPermisoRangoFoto({ desde: l.desde, hasta: l.hasta });
+        setPermisoSel((s) => {
+          const n = { ...s };
+          for (let fx = l.desde as string; fx <= (l.hasta as string); fx = sumarDias(fx, 1)) n[fx] = "incapacidad";
+          return n;
+        });
+      }
+      const partes = [
+        l.codigo ? `código ${l.codigo}` : null,
+        l.desde && l.hasta ? `del ${diaMes(l.desde)} al ${diaMes(l.hasta)}` : null,
+        l.nombre_detectado ? `a nombre de ${l.nombre_detectado}` : null,
+      ];
+      setPermisoMensaje(`Leí: ${partes.filter(Boolean).join(" · ")}. Revísalo y corrige lo que haga falta antes de guardar.`);
+    } catch (err) {
+      setPermisoError(err instanceof Error ? err.message : "No se pudo leer el comprobante");
+    } finally {
+      setPermisoLeyendo(false);
+    }
+  }
+
+  async function guardarPermisos(f: FilaAsesora) {
+    setPermisoError(null);
+    setPermisoMensaje(null);
+    const fechas = new Set([...Object.keys(permisoInicial), ...Object.keys(permisoSel)]);
+    const cambiadas = [...fechas].filter((fecha) => (permisoSel[fecha] ?? null) !== (permisoInicial[fecha] ?? null));
+    if (cambiadas.length === 0) return;
+    setPermisoGuardando(true);
+    try {
+      const quitar = cambiadas.filter((fecha) => !permisoSel[fecha]);
+      for (const [d, h] of tramos(quitar)) {
+        await fetch(`/api/dias-especiales?asesora_id=${f.asesora.id}&desde=${d}&hasta=${h}`, { method: "DELETE" });
+      }
+      for (const tipo of ["libre", "vacaciones", "incapacidad"] as TipoPermiso[]) {
+        const lista = cambiadas.filter((fecha) => permisoSel[fecha] === tipo);
+        // Un comprobante que empieza o termina en otro mes se guarda completo, no solo la parte visible.
+        if (tipo === "incapacidad" && permisoRangoFoto) {
+          for (let fx = permisoRangoFoto.desde; fx <= permisoRangoFoto.hasta; fx = sumarDias(fx, 1)) if (!lista.includes(fx)) lista.push(fx);
+        }
+        if (lista.length === 0) continue;
+        const textoNota =
+          tipo === "incapacidad"
+            ? [permisoCodigo.trim() ? `Comprobante ${permisoCodigo.trim()}` : null, permisoNota.trim() || null].filter(Boolean).join(" · ") || null
+            : permisoNota.trim() || null;
+        for (const [d, h] of tramos(lista)) {
+          const r = await fetch("/api/dias-especiales", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ asesora_id: f.asesora.id, tipo, fecha_desde: d, fecha_hasta: h, nota: textoNota }),
+          });
+          if (!r.ok) throw new Error((await r.json()).error ?? "No se pudo guardar");
+          if (tipo !== "libre") {
+            await fetch("/api/comentarios", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                fecha: d,
+                asunto: tipo === "vacaciones" ? "Vacaciones" : "Incapacidad",
+                asesora_id: f.asesora.id,
+                situacion: `${d === h ? diaMes(d) : `del ${diaMes(d)} al ${diaMes(h)}`}${textoNota ? ` · ${textoNota}` : ""}`,
+              }),
+            }).catch(() => {});
+          }
+        }
+      }
+      recargarTodo();
+      cerrarEdicionPermisos();
+    } catch (err) {
+      setPermisoError(err instanceof Error ? err.message : "No se pudo guardar");
+    } finally {
+      setPermisoGuardando(false);
+    }
+  }
+
   const filaSel = seleccion ? filas.find((f) => f.asesora.id === seleccion.asesoraId) : undefined;
   const diaSel = filaSel && seleccion ? filaSel.dias[seleccion.dia - 1] : undefined;
   const primerDiaSemana = (new Date(`${mes}-01T12:00:00`).getDay() + 6) % 7; // lunes = 0
@@ -600,7 +772,7 @@ export default function PanelPrincipal({ recargar = 0, arriba, onMes }: { recarg
             <div className="mt-2 space-y-2">
               <p className="text-[11px] text-[#6B6D6E] leading-snug">
                 Se trabajan de forma opcional: ese día solo se lista a quienes marcaron, y nadie cuenta como ausente. Los libres, vacaciones e
-                incapacidades se anotan en cada asesora (botón «Editar calendario»).
+                incapacidades se anotan en cada asesora (ícono de lápiz, junto a sus filtros).
               </p>
               {feriados.length === 0 && <p className="text-[11.5px] text-[#6B6D6E]">Sin feriados definidos este mes.</p>}
               {feriados.map((fe) => (
@@ -653,6 +825,7 @@ export default function PanelPrincipal({ recargar = 0, arriba, onMes }: { recarg
 
             {filasVisibles.map((f) => {
               const expandida = abierta === f.asesora.id;
+              const enEdicionPermisos = permisoAbiertoId === f.asesora.id;
               const filtroEfectivo: FiltroDia | null = f.asesora.id in filtroTarjeta ? filtroTarjeta[f.asesora.id] : kpiActivo;
               const dDia = mes === hoy.slice(0, 7) ? f.dias[idxDia] : undefined;
               const info = dDia ? textoDia(f, dDia) : null;
@@ -769,26 +942,11 @@ export default function PanelPrincipal({ recargar = 0, arriba, onMes }: { recarg
 
                   {expandida && (
                     <div className="border-t border-[#DDE7E8] p-3 space-y-2.5 bg-[#F8FBFB]">
-                      {f.asesora.activo && permisoAbiertoId !== f.asesora.id && (
-                        <div className="flex justify-end">
-                          <button
-                            onClick={() => {
-                              setPermisoAbiertoId(f.asesora.id);
-                              setSeleccion(null);
-                              setMoviendoId(null);
-                            }}
-                            className="flex-none flex items-center gap-1 rounded-lg border border-[#1EA6B8] bg-white text-[#0B5F6C] px-2.5 py-1.5 text-[11.5px] font-bold"
-                            aria-label={`Editar libres, vacaciones e incapacidades de ${f.asesora.nombre} en el calendario`}
-                          >
-                            <IconoLapiz size={14} /> Editar calendario
-                          </button>
-                        </div>
-                      )}
-                      <div className="flex flex-wrap gap-1.5 text-[11px] font-bold">
+                      <div className="flex flex-wrap items-center gap-1.5 text-[11px] font-bold">
                         {FILTROS_TARJETA.map((fl) => {
                           const n = f.dias.filter((d) => cumpleFiltro(fl.id, d, hoy)).length;
                           if (n === 0 && fl.id !== "asistencia") return null;
-                          const activo = filtroEfectivo === fl.id;
+                          const activo = !enEdicionPermisos && filtroEfectivo === fl.id;
                           const col = COLOR_FILTRO[fl.id];
                           return (
                             <button
@@ -807,109 +965,248 @@ export default function PanelPrincipal({ recargar = 0, arriba, onMes }: { recarg
                             </button>
                           );
                         })}
+                        {f.asesora.activo && (
+                          <button
+                            onClick={() => (enEdicionPermisos ? cerrarEdicionPermisos() : abrirEdicionPermisos(f))}
+                            className="flex-none w-7 h-7 rounded-lg grid place-items-center ml-auto"
+                            style={{ background: enEdicionPermisos ? ACENTO : "#E4F7F9", color: enEdicionPermisos ? "#FFFFFF" : "#0B5F6C" }}
+                            title="Libres, vacaciones e incapacidades"
+                            aria-label={`Editar libres, vacaciones e incapacidades de ${f.asesora.nombre}`}
+                          >
+                            <IconoLapiz size={14} />
+                          </button>
+                        )}
                       </div>
 
-                      {permisoAbiertoId === f.asesora.id ? (
-                        <PlanificarMes
-                          key={`${f.asesora.id}-${mes}`}
-                          asesoraId={f.asesora.id}
-                          nombre={f.asesora.nombre}
-                          mes={mes}
-                          especiales={diasEspeciales.filter((d) => d.asesora_id === f.asesora.id)}
-                          hoy={hoy}
-                          onCambio={recargarTodo}
-                          onCerrar={() => setPermisoAbiertoId(null)}
-                        />
-                      ) : (
-                        <div className="flex flex-wrap items-start gap-3">
-                          {/* Calendario simple: un solo color, resalta los dias del filtro elegido */}
-                          <div className="flex-none w-[228px] rounded-2xl overflow-hidden border border-[#E5E5EA] bg-white">
-                            <div className="flex items-center justify-between px-2.5 py-2 border-b border-[#E5E5EA]">
-                              <span className="text-[13px] font-semibold text-[#1C1C1E] capitalize">{etiquetaPeriodo}</span>
-                              <div className="flex flex-col -gap-1 leading-none">
-                                <button onClick={() => mover(-1)} className="text-[11px] text-[#0F7A8A] px-1" aria-label="Mes anterior">
-                                  ▲
-                                </button>
-                                <button onClick={() => mover(1)} className="text-[11px] text-[#0F7A8A] px-1" aria-label="Mes siguiente">
-                                  ▼
-                                </button>
+                      <div className="flex flex-wrap items-start gap-3">
+                        {/* Un solo calendario: de lectura normalmente, o editando permisos cuando se toca el lapiz de arriba */}
+                        <div className="flex-none w-[228px] rounded-2xl overflow-hidden border border-[#E5E5EA] bg-white">
+                          <div className="flex items-center justify-between px-2.5 py-2 border-b border-[#E5E5EA]">
+                            <span className="text-[13px] font-semibold text-[#1C1C1E] capitalize">{etiquetaPeriodo}</span>
+                            <div className="flex flex-col -gap-1 leading-none">
+                              <button onClick={() => mover(-1)} className="text-[11px] text-[#0F7A8A] px-1" aria-label="Mes anterior">
+                                ▲
+                              </button>
+                              <button onClick={() => mover(1)} className="text-[11px] text-[#0F7A8A] px-1" aria-label="Mes siguiente">
+                                ▼
+                              </button>
+                            </div>
+                          </div>
+                          <div className="grid grid-cols-7 text-center">
+                            {["LU", "MA", "MI", "JU", "VI", "SA", "DO"].map((l, i) => (
+                              <div key={i} className="py-1.5 text-[9px] font-bold text-[#8E8E93]">
+                                {l}
                               </div>
-                            </div>
-                            <div className="grid grid-cols-7 text-center">
-                              {["LU", "MA", "MI", "JU", "VI", "SA", "DO"].map((l, i) => (
-                                <div key={i} className="py-1.5 text-[9px] font-bold text-[#8E8E93]">
-                                  {l}
-                                </div>
-                              ))}
-                            </div>
-                            <div className="grid grid-cols-7">
-                              {Array.from({ length: primerDiaSemana }).map((_, i) => (
-                                <div key={`v${i}`} className="aspect-square grid place-items-center text-[11px] text-[#C7C7CC]">
-                                  {diasEnMes(mesAnterior(mes)) - primerDiaSemana + i + 1}
-                                </div>
-                              ))}
-                              {f.dias.map((d) => {
-                                const cat = categoriaDia(d, hoy);
-                                const col = cat ? COLOR_FILTRO[cat] : null;
-                                const sel = seleccion?.asesoraId === f.asesora.id && seleccion.dia === d.dia;
-                                const esHoy = d.fecha === hoy;
-                                // Sin filtro: cada dia con su color tenue segun su situacion. Con un filtro elegido, solo esos dias se ven a todo color.
-                                const resaltado = filtroEfectivo ? cumpleFiltro(filtroEfectivo, d, hoy) : false;
-                                const atenuado = !!filtroEfectivo && !resaltado;
+                            ))}
+                          </div>
+                          <div className="grid grid-cols-7">
+                            {Array.from({ length: primerDiaSemana }).map((_, i) => (
+                              <div key={`v${i}`} className="aspect-square grid place-items-center text-[11px] text-[#C7C7CC]">
+                                {diasEnMes(mesAnterior(mes)) - primerDiaSemana + i + 1}
+                              </div>
+                            ))}
+                            {f.dias.map((d) => {
+                              const esHoy = d.fecha === hoy;
+                              const sel = seleccion?.asesoraId === f.asesora.id && seleccion.dia === d.dia;
+
+                              if (enEdicionPermisos) {
+                                const esAusenciaManual = diasEspeciales.some(
+                                  (de) => de.asesora_id === f.asesora.id && de.fecha === d.fecha && de.tipo === "ausencia"
+                                );
+                                const tipoSel = permisoSel[d.fecha] ?? null;
+                                const colSel = tipoSel ? COLOR_FILTRO[tipoSel] : null;
+                                const cambiado = tipoSel !== (permisoInicial[d.fecha] ?? null);
                                 return (
                                   <button
                                     key={d.dia}
-                                    onClick={() => setSeleccion(sel ? null : { asesoraId: f.asesora.id, dia: d.dia })}
-                                    className="aspect-square relative grid place-items-center transition-opacity"
-                                    style={{ opacity: atenuado ? 0.35 : 1 }}
-                                    aria-label={`Día ${d.dia}${esHoy ? " (hoy)" : ""}: ${ESTILO[d.estatus].etiqueta}`}
+                                    onClick={() => alternarDiaPermiso(f, d.fecha)}
+                                    disabled={esAusenciaManual}
+                                    className="aspect-square relative grid place-items-center disabled:opacity-40"
+                                    aria-label={`Día ${d.dia}: ${tipoSel ?? "sin marcar"}`}
                                   >
                                     <span
                                       className="w-[26px] h-[26px] grid place-items-center rounded-md text-[12.5px]"
                                       style={{
-                                        // Hoy nunca lleva color de fondo, solo el recuadro que lo resalta.
-                                        background: esHoy ? "transparent" : resaltado && col ? col.fondo : col ? `${col.fondo}26` : "transparent",
-                                        color: !esHoy && resaltado && col ? col.texto : "#1C1C1E",
-                                        fontWeight: resaltado || esHoy ? 700 : 500,
-                                        boxShadow: sel ? "0 0 0 2px #0B3A41" : esHoy ? `inset 0 0 0 2px ${ACENTO}` : "none",
+                                        background: colSel ? colSel.fondo : "transparent",
+                                        color: colSel ? colSel.texto : esAusenciaManual ? "#E5484D" : "#1C1C1E",
+                                        fontWeight: colSel || esHoy ? 700 : 500,
+                                        boxShadow: cambiado
+                                          ? "0 0 0 2px #FFFFFF, 0 0 0 3.5px #35DCEC"
+                                          : esHoy
+                                          ? `inset 0 0 0 2px ${ACENTO}`
+                                          : "none",
                                       }}
                                     >
                                       {d.dia}
                                     </span>
                                   </button>
                                 );
-                              })}
-                              {Array.from({ length: (7 - ((primerDiaSemana + f.dias.length) % 7)) % 7 }).map((_, i) => (
-                                <div key={`f${i}`} className="aspect-square grid place-items-center text-[11px] text-[#C7C7CC]">
-                                  {i + 1}
-                                </div>
-                              ))}
-                            </div>
-                          </div>
+                              }
 
-                          {/* Comentarios y detalle del mes, al costado del calendario */}
-                          <div className="flex-1 min-w-[190px] space-y-2">
-                            {filaSel && diaSel && seleccion?.asesoraId === f.asesora.id && (
-                              <DetalleDia
-                                fila={filaSel}
-                                dia={diaSel}
-                                detallePermiso={detallePermiso(filaSel, diaSel)}
-                                onCorregido={recargarTodo}
-                                onCerrar={() => setSeleccion(null)}
-                              />
-                            )}
-                            <ComentariosAsesora
-                              asesoraId={f.asesora.id}
-                              mes={mes}
-                              fechaInicial={mes === hoy.slice(0, 7) ? hoy : `${mes}-01`}
-                              comentarios={comentarios.filter((c) => c.asesora_id === f.asesora.id)}
-                              filas={filasDetalle(f, filtroEfectivo)}
-                              filtrado={!!filtroEfectivo}
-                              onCambio={recargarTodo}
-                            />
+                              const cat = categoriaDia(d, hoy);
+                              const col = cat ? COLOR_FILTRO[cat] : null;
+                              // Sin filtro: cada dia con su color tenue segun su situacion. Con un filtro elegido, solo esos dias se ven a todo color.
+                              const resaltado = filtroEfectivo ? cumpleFiltro(filtroEfectivo, d, hoy) : false;
+                              const atenuado = !!filtroEfectivo && !resaltado;
+                              return (
+                                <button
+                                  key={d.dia}
+                                  onClick={() => setSeleccion(sel ? null : { asesoraId: f.asesora.id, dia: d.dia })}
+                                  className="aspect-square relative grid place-items-center transition-opacity"
+                                  style={{ opacity: atenuado ? 0.35 : 1 }}
+                                  aria-label={`Día ${d.dia}${esHoy ? " (hoy)" : ""}: ${ESTILO[d.estatus].etiqueta}`}
+                                >
+                                  <span
+                                    className="w-[26px] h-[26px] grid place-items-center rounded-md text-[12.5px]"
+                                    style={{
+                                      // Hoy nunca lleva color de fondo, solo el recuadro que lo resalta.
+                                      background: esHoy ? "transparent" : resaltado && col ? col.fondo : col ? `${col.fondo}26` : "transparent",
+                                      color: !esHoy && resaltado && col ? col.texto : "#1C1C1E",
+                                      fontWeight: resaltado || esHoy ? 700 : 500,
+                                      boxShadow: sel ? "0 0 0 2px #0B3A41" : esHoy ? `inset 0 0 0 2px ${ACENTO}` : "none",
+                                    }}
+                                  >
+                                    {d.dia}
+                                  </span>
+                                </button>
+                              );
+                            })}
+                            {Array.from({ length: (7 - ((primerDiaSemana + f.dias.length) % 7)) % 7 }).map((_, i) => (
+                              <div key={`f${i}`} className="aspect-square grid place-items-center text-[11px] text-[#C7C7CC]">
+                                {i + 1}
+                              </div>
+                            ))}
                           </div>
                         </div>
-                      )}
+
+                        {/* Al costado del calendario: el detalle del dia y los comentarios, o el editor de permisos */}
+                        <div className="flex-1 min-w-[190px] space-y-2">
+                          {enEdicionPermisos ? (
+                            <div className="rounded-xl border-2 border-[#1EA6B8] bg-white p-3 space-y-2.5">
+                              <div className="flex items-start gap-2">
+                                <div className="flex-1 min-w-0 text-[12.5px] font-bold text-[#0B5F6C] flex items-center gap-1.5">
+                                  <IconoLapiz size={14} /> Editando el calendario
+                                </div>
+                                <button onClick={cerrarEdicionPermisos} className="text-[12px] text-[#6B6D6E] font-semibold px-1">
+                                  Cancelar
+                                </button>
+                              </div>
+                              <p className="text-[11px] text-[#6B6D6E] leading-snug">
+                                Elige el tipo y toca los días de {f.asesora.nombre.split(" ")[0]} en el calendario.
+                              </p>
+                              <div className="grid grid-cols-3 gap-1.5">
+                                {(
+                                  [
+                                    ["libre", "Libre"],
+                                    ["vacaciones", "Vacaciones"],
+                                    ["incapacidad", "Incapacidad"],
+                                  ] as [TipoPermiso, string][]
+                                ).map(([t, etiqueta]) => {
+                                  const n = Object.values(permisoSel).filter((v) => v === t).length;
+                                  const col = COLOR_FILTRO[t];
+                                  const activo = permisoTipo === t;
+                                  return (
+                                    <button
+                                      key={t}
+                                      onClick={() => setPermisoTipo(t)}
+                                      className="rounded-lg py-2 text-[11.5px] font-bold"
+                                      style={{
+                                        background: activo ? col.fondo : "#FFFFFF",
+                                        color: activo ? col.texto : "#3A3B3C",
+                                        border: `1.5px solid ${activo ? col.fondo : "#DDE7E8"}`,
+                                      }}
+                                    >
+                                      {etiqueta}
+                                      <span className="block text-[10px] font-semibold opacity-80">{n} día(s)</span>
+                                    </button>
+                                  );
+                                })}
+                              </div>
+
+                              {permisoTipo === "incapacidad" && (
+                                <div className="rounded-lg bg-[#F2F8F9] p-2.5 space-y-2">
+                                  <button
+                                    onClick={() => permisoInputRef.current?.click()}
+                                    disabled={permisoLeyendo}
+                                    className="w-full flex items-center justify-center gap-2 rounded-lg border-2 border-dashed border-[#1EA6B8] bg-white py-2.5 text-[12.5px] font-bold text-[#0B5F6C] disabled:opacity-60"
+                                  >
+                                    {permisoLeyendo ? (
+                                      "Leyendo el comprobante…"
+                                    ) : (
+                                      <>
+                                        <IconoDocumento size={17} /> Subir foto del comprobante
+                                      </>
+                                    )}
+                                  </button>
+                                  <input
+                                    ref={permisoInputRef}
+                                    type="file"
+                                    accept="image/*"
+                                    className="hidden"
+                                    onChange={(e) => {
+                                      const file = e.target.files?.[0];
+                                      if (file) void leerComprobantePermiso(file);
+                                      e.target.value = "";
+                                    }}
+                                  />
+                                  <input
+                                    value={permisoCodigo}
+                                    onChange={(e) => setPermisoCodigo(e.target.value)}
+                                    placeholder="Código del comprobante (se llena solo con la foto)"
+                                    className="w-full rounded-lg border border-[#DDE7E8] bg-white p-2.5 text-[13px]"
+                                  />
+                                </div>
+                              )}
+
+                              <input
+                                value={permisoNota}
+                                onChange={(e) => setPermisoNota(e.target.value)}
+                                placeholder="Nota (opcional)"
+                                className="w-full rounded-lg border border-[#DDE7E8] p-2.5 text-[13px]"
+                              />
+
+                              {permisoMensaje && <p className="text-[12px] text-[#1E8A5F] font-semibold leading-snug">{permisoMensaje}</p>}
+                              {permisoError && <p className="text-[12px] text-[#B23A3A] font-semibold leading-snug">{permisoError}</p>}
+
+                              {(() => {
+                                const fechas = new Set([...Object.keys(permisoInicial), ...Object.keys(permisoSel)]);
+                                const cambios = [...fechas].filter((fx) => (permisoSel[fx] ?? null) !== (permisoInicial[fx] ?? null)).length;
+                                return (
+                                  <button
+                                    onClick={() => guardarPermisos(f)}
+                                    disabled={permisoGuardando || cambios === 0}
+                                    className="w-full rounded-xl py-2.5 font-bold text-white text-[13px] disabled:opacity-50"
+                                    style={{ background: "linear-gradient(150deg, #0B5F6C, #1EA6B8)" }}
+                                  >
+                                    {permisoGuardando ? "Guardando…" : cambios === 0 ? "Sin cambios por guardar" : `Guardar ${cambios} cambio(s)`}
+                                  </button>
+                                );
+                              })()}
+                            </div>
+                          ) : (
+                            <>
+                              {filaSel && diaSel && seleccion?.asesoraId === f.asesora.id && (
+                                <DetalleDia
+                                  fila={filaSel}
+                                  dia={diaSel}
+                                  detallePermiso={detallePermiso(filaSel, diaSel)}
+                                  onCorregido={recargarTodo}
+                                  onCerrar={() => setSeleccion(null)}
+                                />
+                              )}
+                              <ComentariosAsesora
+                                asesoraId={f.asesora.id}
+                                mes={mes}
+                                fechaInicial={mes === hoy.slice(0, 7) ? hoy : `${mes}-01`}
+                                comentarios={comentarios.filter((c) => c.asesora_id === f.asesora.id)}
+                                filas={filasDetalle(f, filtroEfectivo)}
+                                filtrado={!!filtroEfectivo}
+                                onCambio={recargarTodo}
+                              />
+                            </>
+                          )}
+                        </div>
+                      </div>
 
                     </div>
                   )}
