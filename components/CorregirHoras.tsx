@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { MOTIVOS_CORRECCION } from "@/lib/tipos";
 import { horaAMinutos, MINUTOS_JORNADA_TOTAL } from "@/lib/tiempo";
 import { mensajeAmable } from "@/lib/mensajes";
 import SelectorHora from "@/components/SelectorHora";
@@ -12,8 +11,8 @@ function aHHMM(min: number): string {
 
 /**
  * Nuria corrige la hora de entrada y/o salida de una asesora en un dia (por ejemplo, para
- * completar la jornada de quien se fue antes por una cita medica). Se guarda la hora original
- * de la foto y el motivo como constancia.
+ * completar la jornada de quien se fue antes por un permiso). Los permisos se hablan entre
+ * ellas, no se documentan aqui; solo se guarda la hora original de la foto como constancia.
  */
 export default function CorregirHoras({
   asesoraId,
@@ -41,8 +40,6 @@ export default function CorregirHoras({
   const [nuevaEntrada, setNuevaEntrada] = useState(entrada ?? "");
   const [nuevaSalida, setNuevaSalida] = useState(salida ?? "");
   const [campo, setCampo] = useState<"entrada" | "salida">("entrada");
-  const [motivo, setMotivo] = useState<string>(MOTIVOS_CORRECCION[0]);
-  const [nota, setNota] = useState("");
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -59,10 +56,9 @@ export default function CorregirHoras({
       setError("Todavía no cambiaste ninguna hora.");
       return;
     }
-    const motivoFinal = motivo === "Otro" ? nota.trim() || "Otro" : nota.trim() ? `${motivo} · ${nota.trim()}` : motivo;
     setGuardando(true);
     try {
-      const cuerpo: Record<string, unknown> = { asesora_id: asesoraId, fecha, motivo: motivoFinal };
+      const cuerpo: Record<string, unknown> = { asesora_id: asesoraId, fecha };
       if ((nuevaEntrada || null) !== (entrada ?? null)) cuerpo.entrada = nuevaEntrada || null;
       if ((nuevaSalida || null) !== (salida ?? null)) cuerpo.salida = nuevaSalida || null;
 
@@ -142,32 +138,6 @@ export default function CorregirHoras({
           Completar la jornada (salida {salidaSugerida}, 9 h después de la entrada)
         </button>
       )}
-
-      <label className="block text-[10.5px] font-bold text-[#6B6D6E] uppercase tracking-wide">
-        Motivo del permiso
-        <select
-          value={motivo}
-          onChange={(e) => setMotivo(e.target.value)}
-          className="mt-1 w-full rounded-lg border border-[#DDE7E8] bg-white p-2.5 text-[13px] normal-case font-normal text-[#14181A]"
-        >
-          {MOTIVOS_CORRECCION.map((m) => (
-            <option key={m} value={m}>
-              {m}
-            </option>
-          ))}
-        </select>
-      </label>
-
-      <input
-        value={nota}
-        onChange={(e) => setNota(e.target.value)}
-        placeholder="Detalle (opcional)"
-        className="w-full rounded-lg border border-[#DDE7E8] bg-white p-2.5 text-[13px]"
-      />
-
-      <p className="text-[11px] text-[#6B6D6E] leading-snug">
-        Se guarda la hora original de la foto y el motivo como constancia. Dejar una hora vacía quita esa marca.
-      </p>
 
       {error && <p className="text-[12px] text-[#B23A3A] font-semibold">{error}</p>}
 
