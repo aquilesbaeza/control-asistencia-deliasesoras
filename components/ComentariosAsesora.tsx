@@ -134,10 +134,13 @@ export default function ComentariosAsesora({
       ) : (
         <ul className="space-y-1 max-h-72 overflow-y-auto pr-0.5">
           {items.map((i) => (
-            <li key={i.clave} className="flex items-start gap-2 rounded-lg bg-[#F2F8F9] px-2.5 py-1.5 text-[12px] leading-snug">
+            <li
+              key={i.clave}
+              className="flex items-start gap-2 rounded-lg px-2.5 py-1.5 text-[12px] leading-snug"
+              style={{ background: i.color ? `${i.color}26` : "#F2F8F9" }}
+            >
               <span className="flex-none w-[4.5rem] font-bold text-[#0F7A8A] tabular-nums">{cuando(i)}</span>
               <span className="flex-1 min-w-0">
-                {i.color && <span className="inline-block w-2.5 h-2.5 rounded-sm mr-1.5 align-middle" style={{ background: i.color }} />}
                 {i.comentario && (
                   <span className="inline-block rounded-full bg-[#CFF0F3] text-[#0B5F6C] px-2 py-0.5 text-[10px] font-bold mr-1">{i.comentario.asunto}</span>
                 )}

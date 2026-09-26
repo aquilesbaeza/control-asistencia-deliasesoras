@@ -867,8 +867,9 @@ export default function PanelPrincipal({ recargar = 0, arriba, onMes }: { recarg
                                     <span
                                       className="w-[26px] h-[26px] grid place-items-center rounded-md text-[12.5px]"
                                       style={{
-                                        background: resaltado && col ? col.fondo : col ? `${col.fondo}26` : "transparent",
-                                        color: resaltado && col ? col.texto : "#1C1C1E",
+                                        // Hoy nunca lleva color de fondo, solo el recuadro que lo resalta.
+                                        background: esHoy ? "transparent" : resaltado && col ? col.fondo : col ? `${col.fondo}26` : "transparent",
+                                        color: !esHoy && resaltado && col ? col.texto : "#1C1C1E",
                                         fontWeight: resaltado || esHoy ? 700 : 500,
                                         boxShadow: sel ? "0 0 0 2px #0B3A41" : esHoy ? `inset 0 0 0 2px ${ACENTO}` : "none",
                                       }}
