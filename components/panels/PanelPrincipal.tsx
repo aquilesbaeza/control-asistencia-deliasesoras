@@ -220,17 +220,20 @@ function DetalleDia({
   fila,
   dia,
   detallePermiso,
+  permisoInfo,
   onCorregido,
   onCerrar,
 }: {
   fila: FilaAsesora;
   dia: DiaCalculado;
   detallePermiso: string;
+  permisoInfo: { tipo: TipoPermiso; desde: string; hasta: string; nota: string | null } | null;
   onCorregido: () => void;
   onCerrar: () => void;
 }) {
   const estilo = estiloChip(dia);
-  const [corrigiendo, setCorrigiendo] = useState(false);
+  const esPermiso = dia.estatus === "libre" || dia.estatus === "vacaciones" || dia.estatus === "incapacidad";
+  const [abierto, setAbierto] = useState(false);
   return (
     <div className="rounded-xl border-2 border-[#1EA6B8] bg-white p-3 space-y-2">
       <div className="flex items-start gap-2">
@@ -248,16 +251,33 @@ function DetalleDia({
         </span>
         <span className="flex-1 min-w-0 text-[12px] leading-snug">{[detallePermiso, describirDia(dia)].filter(Boolean).join(" · ")}</span>
         <button
-          onClick={() => setCorrigiendo((v) => !v)}
+          onClick={() => setAbierto((v) => !v)}
           className="flex-none text-[#6B6D6E]"
-          title="Corregir horas de entrada y salida"
-          aria-label="Corregir horas de entrada y salida"
+          title={esPermiso ? "Corregir libre, vacaciones o incapacidad" : "Corregir horas de entrada y salida"}
+          aria-label={esPermiso ? "Corregir libre, vacaciones o incapacidad" : "Corregir horas de entrada y salida"}
         >
           <IconoLapiz size={15} />
         </button>
       </div>
 
-      {corrigiendo && (
+      {abierto && esPermiso && (
+        <EditorPermiso
+          asesoraId={fila.asesora.id}
+          nombre={fila.asesora.nombre}
+          fecha={dia.fecha}
+          tipoInicial={permisoInfo?.tipo}
+          desdeInicial={permisoInfo?.desde}
+          hastaInicial={permisoInfo?.hasta}
+          notaInicial={permisoInfo?.nota ?? undefined}
+          existente={!!permisoInfo}
+          onGuardado={(aviso) => {
+            onCorregido();
+            if (!aviso) setAbierto(false);
+          }}
+          onCerrar={() => setAbierto(false)}
+        />
+      )}
+      {abierto && !esPermiso && (
         <CorregirHoras
           asesoraId={fila.asesora.id}
           nombre={fila.asesora.nombre}
@@ -268,10 +288,10 @@ function DetalleDia({
           salidaOriginal={dia.salidaOriginal}
           motivoPrevio={dia.motivoCorreccion}
           onGuardado={() => {
-            setCorrigiendo(false);
+            setAbierto(false);
             onCorregido();
           }}
-          onCerrar={() => setCorrigiendo(false)}
+          onCerrar={() => setAbierto(false)}
         />
       )}
     </div>
@@ -1251,6 +1271,7 @@ export default function PanelPrincipal({ recargar = 0, arriba, onMes }: { recarg
                                   fila={filaSel}
                                   dia={diaSel}
                                   detallePermiso={detallePermiso(filaSel, diaSel)}
+                                  permisoInfo={rangoPermisoDia(filaSel, diaSel)}
                                   onCorregido={recargarTodo}
                                   onCerrar={() => setSeleccion(null)}
                                 />
