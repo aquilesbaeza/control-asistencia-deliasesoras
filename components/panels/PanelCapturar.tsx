@@ -5,8 +5,7 @@ import PopupAnomalia from "@/components/PopupAnomalia";
 import VisorMarca, { type ItemCaptura } from "@/components/VisorMarca";
 import { claveMarca } from "@/lib/asistencia";
 import { ahoraCR, horaAmPm } from "@/lib/tiempo";
-import { IconoCamara, IconoLapiz } from "@/components/Iconos";
-import SelectorHora from "@/components/SelectorHora";
+import { IconoCamara } from "@/components/Iconos";
 
 type Asesora = { id: string; nombre: string; punto: string };
 type Candidato = Asesora & { score: number };
@@ -291,81 +290,33 @@ export default function PanelCapturar({ onGuardado }: { onGuardado?: () => void 
     setVisorId(porRevisar[0].id);
   }
 
-  // ---- marca manual (sin foto) ----
-  const [manualAbierto, setManualAbierto] = useState(false);
-  const [manualAsesora, setManualAsesora] = useState("");
-  const [manualFecha, setManualFecha] = useState(() => ahoraCR().fecha);
-  const [manualHora, setManualHora] = useState(() => horaActualCR());
-  const [manualTipo, setManualTipo] = useState<"entrada" | "salida">("entrada");
-  const [manualGuardando, setManualGuardando] = useState(false);
-
-  async function guardarManual() {
-    if (!manualAsesora) return;
-    setManualGuardando(true);
-    setError(null);
-    try {
-      const resp = await fetch("/api/marcas", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          asesora_id: manualAsesora,
-          fecha: manualFecha,
-          hora: manualHora,
-          tipo: manualTipo,
-          origen: "manual",
-        }),
-      });
-      const data = await resp.json();
-      if (!resp.ok) throw new Error(data.error);
-      setMensaje(data.omitida ? "Esa marca ya estaba registrada." : "Marca manual guardada.");
-      if (data.anomalia) setColaAnomalias((prev) => [...prev, data.anomalia.mensaje]);
-      setManualAbierto(false);
-      setManualAsesora("");
-      onGuardado?.();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "No se pudo guardar la marca");
-    } finally {
-      setManualGuardando(false);
-    }
-  }
-
   return (
     <div className="space-y-3">
-      <div className="flex gap-2 items-stretch">
-        <div
-          onDragOver={(e) => {
-            e.preventDefault();
-            setArrastrando(true);
+      <div
+        onDragOver={(e) => {
+          e.preventDefault();
+          setArrastrando(true);
+        }}
+        onDragLeave={() => setArrastrando(false)}
+        onDrop={onDrop}
+        onClick={() => inputRef.current?.click()}
+        className={`rounded-2xl border-2 border-dashed px-3 py-4 flex items-center justify-center gap-2 text-[13px] font-bold text-[#0B5F6C] cursor-pointer ${
+          arrastrando ? "bg-[#CFF0F3] border-[#0F7A8A]" : "bg-[#E4F7F9] border-[#1EA6B8]"
+        }`}
+      >
+        <IconoCamara size={22} />
+        Subir fotos de marcas
+        <input
+          ref={inputRef}
+          type="file"
+          accept="image/*"
+          multiple
+          className="hidden"
+          onChange={(e) => {
+            if (e.target.files) void procesarArchivos(e.target.files);
+            e.target.value = "";
           }}
-          onDragLeave={() => setArrastrando(false)}
-          onDrop={onDrop}
-          onClick={() => inputRef.current?.click()}
-          className={`flex-1 min-w-0 rounded-2xl border-2 border-dashed px-3 py-4 flex items-center justify-center gap-2 text-[13px] font-bold text-[#0B5F6C] cursor-pointer ${
-            arrastrando ? "bg-[#CFF0F3] border-[#0F7A8A]" : "bg-[#E4F7F9] border-[#1EA6B8]"
-          }`}
-        >
-          <IconoCamara size={22} />
-          Subir fotos de marcas
-          <input
-            ref={inputRef}
-            type="file"
-            accept="image/*"
-            multiple
-            className="hidden"
-            onChange={(e) => {
-              if (e.target.files) void procesarArchivos(e.target.files);
-              e.target.value = "";
-            }}
-          />
-        </div>
-        <button
-          onClick={() => setManualAbierto((v) => !v)}
-          aria-label={manualAbierto ? "Cerrar marca manual" : "Agregar una marca manual"}
-          title="Marca manual (sin foto)"
-          className={`flex-none w-12 grid place-items-center ${manualAbierto ? "text-[#0B5F6C]" : "text-[#6B6D6E]"}`}
-        >
-          <IconoLapiz size={22} />
-        </button>
+        />
       </div>
 
       {mensaje && <p className="text-sm text-[#1E8A5F] font-semibold">{mensaje}</p>}
@@ -498,50 +449,6 @@ export default function PanelCapturar({ onGuardado }: { onGuardado?: () => void 
           {guardando ? "Guardando…" : `Guardar ${aGuardar.length || ""} marca(s)`.replace("  ", " ")}
         </button>
       )}
-
-      <div className="pt-2 border-t border-[#DDE7E8]">
-        {manualAbierto && (
-          <div className="mt-2 rounded-xl border border-[#DDE7E8] bg-white p-2.5 space-y-2">
-            <select
-              value={manualAsesora}
-              onChange={(e) => setManualAsesora(e.target.value)}
-              className="w-full rounded border border-[#DDE7E8] p-2 text-[12px]"
-            >
-              <option value="">-- Asesora --</option>
-              {catalogo.map((a) => (
-                <option key={a.id} value={a.id}>
-                  {a.nombre} ({a.punto})
-                </option>
-              ))}
-            </select>
-            <input type="date" value={manualFecha} onChange={(e) => setManualFecha(e.target.value)} className="w-full rounded border border-[#DDE7E8] p-2 text-[12px]" />
-            <div className="flex justify-center py-1">
-              <SelectorHora valor={manualHora} onCambio={setManualHora} />
-            </div>
-            <div className="flex gap-1.5">
-              {(["entrada", "salida"] as const).map((t) => (
-                <button
-                  key={t}
-                  onClick={() => setManualTipo(t)}
-                  className={`flex-1 rounded py-2 text-[12px] font-semibold ${
-                    manualTipo === t ? "bg-[#0B5F6C] text-white" : "bg-[#E4F7F9] text-[#0B5F6C]"
-                  }`}
-                >
-                  {t === "entrada" ? "Entrada" : "Salida"}
-                </button>
-              ))}
-            </div>
-            <button
-              onClick={guardarManual}
-              disabled={manualGuardando || !manualAsesora}
-              className="w-full rounded-lg py-2.5 text-[12.5px] font-bold text-white disabled:opacity-50"
-              style={{ background: "linear-gradient(150deg, #0B5F6C, #1EA6B8)" }}
-            >
-              Guardar marca manual
-            </button>
-          </div>
-        )}
-      </div>
 
       {itemVisor && (
         <VisorMarca
