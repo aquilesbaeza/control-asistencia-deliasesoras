@@ -41,13 +41,13 @@ type FiltroDia = Kpi | "asistencia";
 
 // Un color por filtro (solo para el calendario y los chips de cada asesora, no para los 6 indicadores de arriba).
 const COLOR_FILTRO: Record<FiltroDia, { fondo: string; texto: string }> = {
-  asistencia: { fondo: "#1EA6B8", texto: "#FFFFFF" },
+  asistencia: { fondo: "#3FAE6A", texto: "#FFFFFF" },
   ausencia: { fondo: "#E5484D", texto: "#FFFFFF" },
-  libre: { fondo: "#8E9A9C", texto: "#FFFFFF" },
-  vacaciones: { fondo: "#0B5F6C", texto: "#FFFFFF" },
-  incapacidad: { fondo: "#7B61D6", texto: "#FFFFFF" },
-  faltaMarca: { fondo: "#F5B700", texto: "#3A2F00" },
+  faltaMarca: { fondo: "#F5C518", texto: "#3A2F00" },
   jornadaIncompleta: { fondo: "#F0742A", texto: "#FFFFFF" },
+  incapacidad: { fondo: "#8E9A9C", texto: "#FFFFFF" },
+  vacaciones: { fondo: "#4FB8E8", texto: "#0B3A41" },
+  libre: { fondo: "#14C4B8", texto: "#FFFFFF" },
 };
 const ORDEN_CATEGORIA: FiltroDia[] = ["ausencia", "faltaMarca", "jornadaIncompleta", "incapacidad", "vacaciones", "libre", "asistencia"];
 
