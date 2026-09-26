@@ -4,6 +4,7 @@ import { useState } from "react";
 import { MOTIVOS_CORRECCION } from "@/lib/tipos";
 import { horaAMinutos, MINUTOS_JORNADA_TOTAL } from "@/lib/tiempo";
 import { mensajeAmable } from "@/lib/mensajes";
+import SelectorHora from "@/components/SelectorHora";
 
 function aHHMM(min: number): string {
   return `${String(Math.floor(min / 60) % 24).padStart(2, "0")}:${String(min % 60).padStart(2, "0")}`;
@@ -39,6 +40,7 @@ export default function CorregirHoras({
 }) {
   const [nuevaEntrada, setNuevaEntrada] = useState(entrada ?? "");
   const [nuevaSalida, setNuevaSalida] = useState(salida ?? "");
+  const [campo, setCampo] = useState<"entrada" | "salida">("entrada");
   const [motivo, setMotivo] = useState<string>(MOTIVOS_CORRECCION[0]);
   const [nota, setNota] = useState("");
   const [guardando, setGuardando] = useState(false);
@@ -99,26 +101,38 @@ export default function CorregirHoras({
         </p>
       )}
 
-      <div className="grid grid-cols-2 gap-2">
-        <label className="text-[10.5px] font-bold text-[#6B6D6E] uppercase tracking-wide">
-          Entrada
-          <input
-            type="time"
-            value={nuevaEntrada}
-            onChange={(e) => setNuevaEntrada(e.target.value)}
-            className="mt-1 w-full rounded-lg border border-[#DDE7E8] bg-white p-2.5 text-[16px] font-bold text-[#14181A]"
-          />
-        </label>
-        <label className="text-[10.5px] font-bold text-[#6B6D6E] uppercase tracking-wide">
-          Salida
-          <input
-            type="time"
-            value={nuevaSalida}
-            onChange={(e) => setNuevaSalida(e.target.value)}
-            className="mt-1 w-full rounded-lg border border-[#DDE7E8] bg-white p-2.5 text-[16px] font-bold text-[#14181A]"
-          />
-        </label>
+      <div className="grid grid-cols-2 gap-1.5">
+        {(
+          [
+            ["entrada", "Entrada", nuevaEntrada],
+            ["salida", "Salida", nuevaSalida],
+          ] as const
+        ).map(([id, etiqueta, valor]) => (
+          <button
+            key={id}
+            onClick={() => setCampo(id)}
+            className={`rounded-lg py-2 text-[13px] font-bold tabular-nums ${
+              campo === id ? "bg-[#0B5F6C] text-white" : "bg-[#E4F7F9] text-[#0B5F6C]"
+            }`}
+          >
+            {etiqueta}
+            <span className="block text-[15px]">{valor || "--:--"}</span>
+          </button>
+        ))}
       </div>
+
+      <div className="flex justify-center py-1">
+        <SelectorHora
+          valor={campo === "entrada" ? nuevaEntrada || "00:00" : nuevaSalida || "00:00"}
+          onCambio={campo === "entrada" ? setNuevaEntrada : setNuevaSalida}
+        />
+      </div>
+      <button
+        onClick={() => (campo === "entrada" ? setNuevaEntrada("") : setNuevaSalida(""))}
+        className="w-full text-[11.5px] text-[#B23A3A] font-semibold"
+      >
+        Quitar esta marca (dejarla vacía)
+      </button>
 
       {salidaSugerida && (
         <button
