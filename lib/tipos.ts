@@ -75,8 +75,6 @@ export type Comentario = {
   asesoras?: { nombre: string; punto: string } | null;
 };
 
-export const MOTIVOS_CORRECCION = ["Cita médica", "Asunto personal", "Emergencia familiar", "Error de lectura de la foto", "Otro"] as const;
-
 export type Feriado = {
   id: string;
   fecha: string;

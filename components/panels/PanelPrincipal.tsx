@@ -18,23 +18,22 @@ import { ahoraCR, aSetiembre, horaAmPm } from "@/lib/tiempo";
 import type { Asesora, Comentario, DiaEspecial, Feriado, Marca } from "@/lib/tipos";
 import { IconoCalendario, IconoComentario, IconoDocumento, IconoLapiz } from "@/components/Iconos";
 
-const ESTILO: Record<EstatusDia, { etiqueta: string; letra: string; fondo: string; texto: string }> = {
-  asistencia: { etiqueta: "Jornada completa", letra: "A", fondo: "#1EA6B8", texto: "#FFFFFF" },
-  ausencia: { etiqueta: "Ausencia", letra: "X", fondo: "#FBE4E4", texto: "#B23A3A" },
-  incapacidad: { etiqueta: "Incapacidad", letra: "I", fondo: "#CFF0F3", texto: "#0B5F6C" },
-  libre: { etiqueta: "Libre", letra: "L", fondo: "#E4F7F9", texto: "#0F7A8A" },
-  vacaciones: { etiqueta: "Vacaciones", letra: "V", fondo: "#0B5F6C", texto: "#FFFFFF" },
-  parcial: { etiqueta: "Falta una marca", letra: "!", fondo: "#35DCEC", texto: "#0B3A41" },
-  enJornada: { etiqueta: "En jornada", letra: "J", fondo: "#E4F7F9", texto: "#0B5F6C" },
-  feriado: { etiqueta: "Feriado", letra: "F", fondo: "#DDE7E8", texto: "#3A3B3C" },
-  pendiente: { etiqueta: "Sin datos aún", letra: "·", fondo: "#F2F8F9", texto: "#6B6D6E" },
-  fuera: { etiqueta: "Aún no laboraba / ya no labora", letra: "–", fondo: "#FFFFFF", texto: "#9AA3A4" },
+const ESTILO: Record<EstatusDia, { etiqueta: string; fondo: string; texto: string }> = {
+  asistencia: { etiqueta: "Jornada completa", fondo: "#1EA6B8", texto: "#FFFFFF" },
+  ausencia: { etiqueta: "Ausencia", fondo: "#FBE4E4", texto: "#B23A3A" },
+  incapacidad: { etiqueta: "Incapacidad", fondo: "#CFF0F3", texto: "#0B5F6C" },
+  libre: { etiqueta: "Libre", fondo: "#E4F7F9", texto: "#0F7A8A" },
+  vacaciones: { etiqueta: "Vacaciones", fondo: "#0B5F6C", texto: "#FFFFFF" },
+  parcial: { etiqueta: "Falta una marca", fondo: "#35DCEC", texto: "#0B3A41" },
+  enJornada: { etiqueta: "En jornada", fondo: "#E4F7F9", texto: "#0B5F6C" },
+  feriado: { etiqueta: "Feriado", fondo: "#DDE7E8", texto: "#3A3B3C" },
+  pendiente: { etiqueta: "Sin datos aún", fondo: "#F2F8F9", texto: "#6B6D6E" },
+  fuera: { etiqueta: "Aún no laboraba / ya no labora", fondo: "#FFFFFF", texto: "#9AA3A4" },
 };
 
 // Acento general de la app (botones, "hoy" en el calendario).
 const ACENTO = "#0B5F6C";
 
-type Periodo = "dia" | "semana" | "mes";
 type Kpi = "ausencia" | "faltaMarca" | "jornadaIncompleta" | "incapacidad" | "vacaciones" | "libre";
 type Tono = "ok" | "warn" | "info";
 type FiltroDia = Kpi | "asistencia";
@@ -101,12 +100,6 @@ function sumarDias(iso: string, n: number): string {
   return new Date(Date.UTC(a, m - 1, d + n)).toISOString().slice(0, 10);
 }
 
-function lunesDe(iso: string): string {
-  const [a, m, d] = iso.split("-").map(Number);
-  const dow = new Date(Date.UTC(a, m - 1, d)).getUTCDay();
-  return sumarDias(iso, dow === 0 ? -6 : 1 - dow);
-}
-
 function tituloDia(iso: string): string {
   const t = aSetiembre(new Date(`${iso}T12:00:00`).toLocaleDateString("es-CR", { weekday: "long", day: "numeric", month: "long" }));
   return t.charAt(0).toUpperCase() + t.slice(1);
@@ -152,14 +145,9 @@ function fotoReducida(file: File): Promise<{ base64: string; mediaType: string }
   });
 }
 
-function rangoDePeriodo(periodo: Periodo, ref: string, mes: string, totalDias: number): { desde: string; hasta: string } {
-  const primero = `${mes}-01`;
-  const ultimo = `${mes}-${String(totalDias).padStart(2, "0")}`;
-  if (periodo === "dia") return { desde: ref, hasta: ref };
-  if (periodo === "mes") return { desde: primero, hasta: ultimo };
-  const lunes = lunesDe(ref);
-  const domingo = sumarDias(lunes, 6);
-  return { desde: lunes < primero ? primero : lunes, hasta: domingo > ultimo ? ultimo : domingo };
+// Siempre se ve el mes completo (ya no hay vista de dia ni de semana).
+function rangoDelMes(mes: string, totalDias: number): { desde: string; hasta: string } {
+  return { desde: `${mes}-01`, hasta: `${mes}-${String(totalDias).padStart(2, "0")}` };
 }
 
 function cumple(kpi: Kpi, d: DiaCalculado, hoy: string): boolean {
@@ -293,7 +281,6 @@ function DetalleDia({
 export default function PanelPrincipal({ recargar = 0, arriba, onMes }: { recargar?: number; arriba?: ReactNode; onMes?: (mes: string) => void }) {
   const [referencia, setReferencia] = useState(() => ahoraCR().fecha);
   // Solo se ve el mes: los indicadores cuentan todo el mes y cada asesora muestra su estado de hoy.
-  const periodo = "mes" as Periodo;
   const [kpiActivo, setKpiActivo] = useState<Kpi | null>(null);
   // Filtro propio de cada tarjeta (botones del resumen); si no hay, manda el indicador de arriba.
   const [filtroTarjeta, setFiltroTarjeta] = useState<Record<string, FiltroDia | null>>({});
@@ -403,9 +390,9 @@ export default function PanelPrincipal({ recargar = 0, arriba, onMes }: { recarg
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [asesoras, marcas, diasEspeciales, mes, totalDias, fechasFeriado, feriadosConfirmados, hoy]);
 
-  const rango = useMemo(() => rangoDePeriodo(periodo, referencia, mes, totalDias), [periodo, referencia, mes, totalDias]);
+  const rango = useMemo(() => rangoDelMes(mes, totalDias), [mes, totalDias]);
 
-  // Dias de cada asesora dentro del periodo elegido que cumplen cada condicion.
+  // Dias de cada asesora en el mes que cumplen cada condicion (indicador).
   const coincidencias = useMemo(() => {
     const porAsesora = new Map<string, Record<Kpi, DiaCalculado[]>>();
     const vacio = (): Record<Kpi, DiaCalculado[]> => ({
@@ -437,29 +424,14 @@ export default function PanelPrincipal({ recargar = 0, arriba, onMes }: { recarg
     return t;
   }, [filas, coincidencias]);
 
-  const esFeriadoRef = false;
-  const feriadoRef = feriados.find((f) => f.fecha === referencia);
-  const idxDia = mes === hoy.slice(0, 7) ? Number(hoy.slice(8)) - 1 : 0; // dia que se muestra en cada tarjeta
+  const idxDia = mes === hoy.slice(0, 7) ? Number(hoy.slice(8)) - 1 : 0; // dia de hoy dentro del mes, para el resumen de cada tarjeta
 
   const filasVisibles = useMemo(() => {
-    let lista = filas;
-    if (periodo === "dia") {
-      // Como en la vista diaria: no se lista a quien aun no ingresaba, ni (en feriado) a quien no lo trabajo.
-      lista = lista.filter((f) => {
-        const d = f.dias[idxDia];
-        if (!d || d.estatus === "fuera") return false;
-        if (esFeriadoRef && !d.entrada && !d.salida) return false;
-        return true;
-      });
-    }
-    if (kpiActivo) {
-      lista = lista.filter((f) => (coincidencias.get(f.asesora.id)?.[kpiActivo].length ?? 0) > 0);
-      lista = [...lista].sort(
-        (a, b) => (coincidencias.get(b.asesora.id)?.[kpiActivo].length ?? 0) - (coincidencias.get(a.asesora.id)?.[kpiActivo].length ?? 0)
-      );
-    }
-    return lista;
-  }, [filas, kpiActivo, coincidencias, periodo, idxDia, esFeriadoRef]);
+    if (!kpiActivo) return filas;
+    return [...filas]
+      .filter((f) => (coincidencias.get(f.asesora.id)?.[kpiActivo].length ?? 0) > 0)
+      .sort((a, b) => (coincidencias.get(b.asesora.id)?.[kpiActivo].length ?? 0) - (coincidencias.get(a.asesora.id)?.[kpiActivo].length ?? 0));
+  }, [filas, kpiActivo, coincidencias]);
 
   // Texto corto y tono del dia elegido (vista diaria).
   function textoDia(f: FilaAsesora, d: DiaCalculado): { texto: string; tono: Tono } {
@@ -726,12 +698,7 @@ export default function PanelPrincipal({ recargar = 0, arriba, onMes }: { recarg
   const diaSel = filaSel && seleccion ? filaSel.dias[seleccion.dia - 1] : undefined;
   const primerDiaSemana = (new Date(`${mes}-01T12:00:00`).getDay() + 6) % 7; // lunes = 0
 
-  const etiquetaPeriodo =
-    periodo === "dia"
-      ? tituloDia(referencia)
-      : periodo === "semana"
-      ? `Semana del ${Number(rango.desde.split("-")[2])} al ${Number(rango.hasta.split("-")[2])} de ${aSetiembre(new Date(`${rango.hasta}T12:00:00`).toLocaleDateString("es-CR", { month: "long" }))}`
-      : aSetiembre(new Date(`${mes}-01T12:00:00`).toLocaleDateString("es-CR", { month: "long", year: "numeric" }));
+  const etiquetaPeriodo = aSetiembre(new Date(`${mes}-01T12:00:00`).toLocaleDateString("es-CR", { month: "long", year: "numeric" }));
 
   const esHoyElPeriodo = hoy >= rango.desde && hoy <= rango.hasta;
 
@@ -764,12 +731,6 @@ export default function PanelPrincipal({ recargar = 0, arriba, onMes }: { recarg
           </button>
         )}
       </div>
-
-      {esFeriadoRef && (
-        <div className="rounded-xl bg-[#E4F7F9] border border-[#CFF0F3] p-3 text-[12.5px] text-[#0B5F6C] font-semibold">
-          Feriado{feriadoRef?.descripcion ? ` — ${feriadoRef.descripcion}` : ""}. Solo se lista a quienes lo trabajaron.
-        </div>
-      )}
 
       {cargando ? (
         <p className="text-sm text-[#6B6D6E]">Cargando…</p>
