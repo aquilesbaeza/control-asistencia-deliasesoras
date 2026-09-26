@@ -33,9 +33,9 @@ const ESTILO: Record<EstatusDia, { etiqueta: string; fondo: string; texto: strin
 // Acento general de la app (botones, "hoy" en el calendario).
 const ACENTO = "#0B5F6C";
 
-type Kpi = "ausencia" | "faltaMarca" | "jornadaIncompleta" | "incapacidad" | "vacaciones" | "libre";
+type Kpi = "asistencia" | "ausencia" | "faltaMarca" | "jornadaIncompleta" | "incapacidad" | "vacaciones" | "libre";
 type Tono = "ok" | "warn" | "info";
-type FiltroDia = Kpi | "asistencia";
+type FiltroDia = Kpi;
 
 // Un color por filtro (solo para el calendario y los chips de cada asesora, no para los 6 indicadores de arriba).
 const COLOR_FILTRO: Record<FiltroDia, { fondo: string; texto: string }> = {
@@ -49,14 +49,23 @@ const COLOR_FILTRO: Record<FiltroDia, { fondo: string; texto: string }> = {
 };
 const ORDEN_CATEGORIA: FiltroDia[] = ["ausencia", "faltaMarca", "jornadaIncompleta", "incapacidad", "vacaciones", "libre", "asistencia"];
 
-/**
- * Si el dia cumple el filtro (los indicadores de arriba mas "asistencia", que solo existe en cada
- * tarjeta y fusiona ausencia y jornada incompleta: son las tres caras de "vino o no a trabajar").
- */
+/** Si el dia cumple el filtro/indicador elegido. */
 function cumpleFiltro(filtro: FiltroDia, d: DiaCalculado, hoy: string): boolean {
-  return filtro === "asistencia"
-    ? d.estatus === "asistencia" || d.estatus === "enJornada" || d.estatus === "ausencia"
-    : cumple(filtro, d, hoy);
+  switch (filtro) {
+    case "asistencia":
+      return d.estatus === "asistencia" || d.estatus === "enJornada";
+    case "ausencia":
+      return d.estatus === "ausencia";
+    case "faltaMarca":
+      // Falta una de las dos marcas; hoy, ademas, quien aun no marca su entrada (unico aviso durante el dia).
+      return d.estatus === "parcial" || (d.estatus === "pendiente" && d.fecha === hoy && !d.entrada && !d.salida && !d.manual);
+    case "jornadaIncompleta":
+      return d.estatus === "asistencia" && d.horas !== null && d.horas < 8;
+    case "incapacidad":
+    case "vacaciones":
+    case "libre":
+      return d.estatus === filtro;
+  }
 }
 
 /** A que categoria (y por tanto que color) pertenece un dia; null si no hay nada que resaltar. */
@@ -65,17 +74,10 @@ function categoriaDia(d: DiaCalculado, hoy: string): FiltroDia | null {
   return null;
 }
 
-// Botones-filtro del resumen de cada asesora: "asistencias" ya fusiona ausencias y jornada incompleta
-// (son la misma cosa: vino, vino menos horas, o no vino). Libre se omite: se define al editar el calendario.
-const FILTROS_TARJETA: { id: FiltroDia; etiqueta: string }[] = [
-  { id: "asistencia", etiqueta: "asistencias" },
-  { id: "vacaciones", etiqueta: "vacaciones" },
-  { id: "incapacidad", etiqueta: "incapacidad" },
-  { id: "faltaMarca", etiqueta: "falta marca" },
-];
-
-// Los seis, en una sola fila: mismo color de acento cuando estan activos, sin distincion de color entre ellos.
+// Filtros: mismo color de acento cuando estan activos. Filtran los nombres y, al abrir cada
+// asesora, resaltan en su calendario solo los dias de esa condicion.
 const KPIS: { id: Kpi; etiqueta: string }[] = [
+  { id: "asistencia", etiqueta: "Asistencia" },
   { id: "ausencia", etiqueta: "Ausencia" },
   { id: "faltaMarca", etiqueta: "Falta marca" },
   { id: "jornadaIncompleta", etiqueta: "Jornada incompleta" },
@@ -147,22 +149,6 @@ function fotoReducida(file: File): Promise<{ base64: string; mediaType: string }
 // Siempre se ve el mes completo (ya no hay vista de dia ni de semana).
 function rangoDelMes(mes: string, totalDias: number): { desde: string; hasta: string } {
   return { desde: `${mes}-01`, hasta: `${mes}-${String(totalDias).padStart(2, "0")}` };
-}
-
-function cumple(kpi: Kpi, d: DiaCalculado, hoy: string): boolean {
-  switch (kpi) {
-    case "ausencia":
-      return d.estatus === "ausencia";
-    case "faltaMarca":
-      // Falta una de las dos marcas; hoy, ademas, quien aun no marca su entrada (unico aviso durante el dia).
-      return d.estatus === "parcial" || (d.estatus === "pendiente" && d.fecha === hoy && !d.entrada && !d.salida && !d.manual);
-    case "jornadaIncompleta":
-      return d.estatus === "asistencia" && d.horas !== null && d.horas < 8;
-    case "incapacidad":
-    case "vacaciones":
-    case "libre":
-      return d.estatus === kpi;
-  }
 }
 
 type FilaAsesora = { asesora: Asesora; dias: DiaCalculado[]; resumen: ResumenMes };
@@ -297,7 +283,6 @@ export default function PanelPrincipal({ recargar = 0, arriba, onMes }: { recarg
   // Solo se ve el mes: los indicadores cuentan todo el mes y cada asesora muestra su estado de hoy.
   const [kpiActivo, setKpiActivo] = useState<Kpi | null>(null);
   // Filtro propio de cada tarjeta (botones del resumen); si no hay, manda el indicador de arriba.
-  const [filtroTarjeta, setFiltroTarjeta] = useState<Record<string, FiltroDia | null>>({});
   const [asesoras, setAsesoras] = useState<Asesora[]>([]);
   const [marcas, setMarcas] = useState<Marca[]>([]);
   const [diasEspeciales, setDiasEspeciales] = useState<DiaEspecial[]>([]);
@@ -410,13 +395,13 @@ export default function PanelPrincipal({ recargar = 0, arriba, onMes }: { recarg
   const coincidencias = useMemo(() => {
     const porAsesora = new Map<string, Record<Kpi, DiaCalculado[]>>();
     const vacio = (): Record<Kpi, DiaCalculado[]> => ({
-      ausencia: [], faltaMarca: [], jornadaIncompleta: [], incapacidad: [], vacaciones: [], libre: [],
+      asistencia: [], ausencia: [], faltaMarca: [], jornadaIncompleta: [], incapacidad: [], vacaciones: [], libre: [],
     });
     for (const f of filas) {
       const r = vacio();
       for (const d of f.dias) {
         if (d.fecha < rango.desde || d.fecha > rango.hasta) continue;
-        for (const k of KPIS) if (cumple(k.id, d, hoy)) r[k.id].push(d);
+        for (const k of KPIS) if (cumpleFiltro(k.id, d, hoy)) r[k.id].push(d);
       }
       porAsesora.set(f.asesora.id, r);
     }
@@ -753,7 +738,7 @@ export default function PanelPrincipal({ recargar = 0, arriba, onMes }: { recarg
       ) : (
         <>
           {/* Indicadores: son filtros; tocar uno resalta a las asesoras que cumplen la condicion */}
-          <div className="grid grid-cols-6 gap-1">
+          <div className="grid grid-cols-4 gap-1">
             {KPIS.map((k) => {
               const activo = kpiActivo === k.id;
               const { personas } = totales[k.id];
@@ -762,7 +747,6 @@ export default function PanelPrincipal({ recargar = 0, arriba, onMes }: { recarg
                   key={k.id}
                   onClick={() => {
                     setKpiActivo(activo ? null : k.id);
-                    setFiltroTarjeta({});
                   }}
                   className="rounded-lg py-2 px-0.5 text-center"
                   style={{
@@ -845,7 +829,7 @@ export default function PanelPrincipal({ recargar = 0, arriba, onMes }: { recarg
             {filasVisibles.map((f) => {
               const expandida = abierta === f.asesora.id;
               const enEdicionPermisos = permisoAbiertoId === f.asesora.id;
-              const filtroEfectivo: FiltroDia | null = f.asesora.id in filtroTarjeta ? filtroTarjeta[f.asesora.id] : kpiActivo;
+              const filtroEfectivo: FiltroDia | null = kpiActivo;
               const dDia = mes === hoy.slice(0, 7) ? f.dias[idxDia] : undefined;
               const info = dDia ? textoDia(f, dDia) : null;
               return (
@@ -989,41 +973,19 @@ export default function PanelPrincipal({ recargar = 0, arriba, onMes }: { recarg
 
                   {expandida && (
                     <div className="border-t border-[#DDE7E8] p-3 space-y-2.5 bg-[#F8FBFB]">
-                      <div className="flex flex-wrap items-center gap-1.5 text-[11px] font-bold">
-                        {FILTROS_TARJETA.map((fl) => {
-                          const n = f.dias.filter((d) => cumpleFiltro(fl.id, d, hoy)).length;
-                          if (n === 0 && fl.id !== "asistencia") return null;
-                          const activo = !enEdicionPermisos && filtroEfectivo === fl.id;
-                          const col = COLOR_FILTRO[fl.id];
-                          return (
-                            <button
-                              key={fl.id}
-                              onClick={() => setFiltroTarjeta((m) => ({ ...m, [f.asesora.id]: activo ? null : fl.id }))}
-                              aria-pressed={activo}
-                              className="flex items-center gap-1.5 rounded-lg px-2 py-1"
-                              style={{
-                                background: activo ? col.fondo : "#FFFFFF",
-                                color: activo ? col.texto : "#3A3B3C",
-                                border: `1.5px solid ${activo ? col.fondo : "#DDE7E8"}`,
-                              }}
-                            >
-                              <span className="inline-block w-2 h-2 rounded-sm" style={{ background: col.fondo, boxShadow: activo ? "0 0 0 1px #FFFFFF" : "none" }} />
-                              {n} {fl.etiqueta}
-                            </button>
-                          );
-                        })}
-                        {f.asesora.activo && (
+                      {f.asesora.activo && (
+                        <div className="flex justify-end">
                           <button
                             onClick={() => (enEdicionPermisos ? cerrarEdicionPermisos() : abrirEdicionPermisos(f))}
-                            className="flex-none w-7 h-7 rounded-lg grid place-items-center ml-auto"
+                            className="flex-none w-7 h-7 rounded-lg grid place-items-center"
                             style={{ background: enEdicionPermisos ? ACENTO : "#E4F7F9", color: enEdicionPermisos ? "#FFFFFF" : "#0B5F6C" }}
                             title="Libres, vacaciones e incapacidades"
                             aria-label={`Editar libres, vacaciones e incapacidades de ${f.asesora.nombre}`}
                           >
                             <IconoLapiz size={14} />
                           </button>
-                        )}
-                      </div>
+                        </div>
+                      )}
 
                       <div className="flex flex-wrap items-start gap-3">
                         {/* Un solo calendario: de lectura normalmente, o editando permisos cuando se toca el lapiz de arriba */}
