@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import PreguntaFeriados from "@/components/PreguntaFeriados";
 import ComentariosAsesora, { type FilaDetalle } from "@/components/ComentariosAsesora";
 import CorregirHoras from "@/components/CorregirHoras";
+import EditorPermiso from "@/components/EditorPermiso";
 import { AsesorasQuitadas, FormMoverAsesora, NuevaAsesora, quitarAsesora } from "@/components/AsesoraAcciones";
 import {
   calcularMesAsesora,
@@ -50,9 +51,14 @@ const COLOR_FILTRO: Record<FiltroDia, { fondo: string; texto: string }> = {
 };
 const ORDEN_CATEGORIA: FiltroDia[] = ["ausencia", "faltaMarca", "jornadaIncompleta", "incapacidad", "vacaciones", "libre", "asistencia"];
 
-/** Si el dia cumple el filtro (los indicadores de arriba mas "asistencia", que solo existe en cada tarjeta). */
+/**
+ * Si el dia cumple el filtro (los indicadores de arriba mas "asistencia", que solo existe en cada
+ * tarjeta y fusiona ausencia y jornada incompleta: son las tres caras de "vino o no a trabajar").
+ */
 function cumpleFiltro(filtro: FiltroDia, d: DiaCalculado, hoy: string): boolean {
-  return filtro === "asistencia" ? d.estatus === "asistencia" || d.estatus === "enJornada" : cumple(filtro, d, hoy);
+  return filtro === "asistencia"
+    ? d.estatus === "asistencia" || d.estatus === "enJornada" || d.estatus === "ausencia"
+    : cumple(filtro, d, hoy);
 }
 
 /** A que categoria (y por tanto que color) pertenece un dia; null si no hay nada que resaltar. */
@@ -61,15 +67,13 @@ function categoriaDia(d: DiaCalculado, hoy: string): FiltroDia | null {
   return null;
 }
 
-// Botones-filtro del resumen de cada asesora, en este orden.
+// Botones-filtro del resumen de cada asesora: "asistencias" ya fusiona ausencias y jornada incompleta
+// (son la misma cosa: vino, vino menos horas, o no vino). Libre se omite: se define al editar el calendario.
 const FILTROS_TARJETA: { id: FiltroDia; etiqueta: string }[] = [
   { id: "asistencia", etiqueta: "asistencias" },
-  { id: "ausencia", etiqueta: "ausencias" },
-  { id: "libre", etiqueta: "libres" },
   { id: "vacaciones", etiqueta: "vacaciones" },
   { id: "incapacidad", etiqueta: "incapacidad" },
   { id: "faltaMarca", etiqueta: "falta marca" },
-  { id: "jornadaIncompleta", etiqueta: "jornada incompleta" },
 ];
 
 // Los seis, en una sola fila: mismo color de acento cuando estan activos, sin distincion de color entre ellos.
@@ -215,17 +219,19 @@ function DetalleDia({
   fila,
   dia,
   detallePermiso,
+  permisoInfo,
   onCorregido,
   onCerrar,
 }: {
   fila: FilaAsesora;
   dia: DiaCalculado;
   detallePermiso: string;
+  permisoInfo: { tipo: TipoPermiso; desde: string; hasta: string; nota: string | null } | null;
   onCorregido: () => void;
   onCerrar: () => void;
 }) {
   const estilo = ESTILO[dia.estatus];
-  const [corrigiendo, setCorrigiendo] = useState(false);
+  const [modo, setModo] = useState<"horas" | "permiso" | null>(null);
   return (
     <div className="rounded-xl border-2 border-[#1EA6B8] bg-white p-3 space-y-2">
       <div className="flex items-start gap-2">
@@ -243,7 +249,7 @@ function DetalleDia({
         </span>
         <span className="flex-1 min-w-0 text-[12px] leading-snug">{[detallePermiso, describirDia(dia)].filter(Boolean).join(" · ")}</span>
         <button
-          onClick={() => setCorrigiendo((v) => !v)}
+          onClick={() => setModo((m) => (m === "horas" ? null : "horas"))}
           className="flex-none text-[#6B6D6E]"
           title="Corregir horas de entrada y salida"
           aria-label="Corregir horas de entrada y salida"
@@ -251,7 +257,15 @@ function DetalleDia({
           <IconoLapiz size={15} />
         </button>
       </div>
-      {corrigiendo && (
+
+      <button
+        onClick={() => setModo((m) => (m === "permiso" ? null : "permiso"))}
+        className="w-full rounded-lg border border-dashed border-[#1EA6B8] text-[#0B5F6C] py-1.5 text-[11.5px] font-bold"
+      >
+        {permisoInfo ? "Editar libre, vacaciones o incapacidad" : "Marcar como libre, vacaciones o incapacidad"}
+      </button>
+
+      {modo === "horas" && (
         <CorregirHoras
           asesoraId={fila.asesora.id}
           nombre={fila.asesora.nombre}
@@ -262,10 +276,27 @@ function DetalleDia({
           salidaOriginal={dia.salidaOriginal}
           motivoPrevio={dia.motivoCorreccion}
           onGuardado={() => {
-            setCorrigiendo(false);
+            setModo(null);
             onCorregido();
           }}
-          onCerrar={() => setCorrigiendo(false)}
+          onCerrar={() => setModo(null)}
+        />
+      )}
+      {modo === "permiso" && (
+        <EditorPermiso
+          asesoraId={fila.asesora.id}
+          nombre={fila.asesora.nombre}
+          fecha={dia.fecha}
+          tipoInicial={permisoInfo?.tipo}
+          desdeInicial={permisoInfo?.desde}
+          hastaInicial={permisoInfo?.hasta}
+          notaInicial={permisoInfo?.nota ?? undefined}
+          existente={!!permisoInfo}
+          onGuardado={() => {
+            setModo(null);
+            onCorregido();
+          }}
+          onCerrar={() => setModo(null)}
         />
       )}
     </div>
@@ -301,6 +332,7 @@ export default function PanelPrincipal({ recargar = 0, arriba, onMes }: { recarg
   const [permisoError, setPermisoError] = useState<string | null>(null);
   const permisoInputRef = useRef<HTMLInputElement>(null);
   const [editandoHoyId, setEditandoHoyId] = useState<string | null>(null); // pencil junto a la hora de hoy
+  const [modoHoy, setModoHoy] = useState<"horas" | "permiso" | null>(null); // que se edita de hoy: horas o libre/vacaciones/incapacidad
   const [seleccion, setSeleccion] = useState<Seleccion>(null);
   const [mostrarNueva, setMostrarNueva] = useState(false);
   const [aviso, setAviso] = useState<string | null>(null);
@@ -465,11 +497,10 @@ export default function PanelPrincipal({ recargar = 0, arriba, onMes }: { recarg
       case "fuera":
         return { texto: "", tono: "info" };
       default: {
-        // libre, vacaciones, incapacidad
+        // libre, vacaciones, incapacidad: en el resumen de "hoy" solo el rango, el dia N de M y la fecha de regreso (la nota se ve al abrir el dia).
         let texto = ESTILO[d.estatus].etiqueta;
         const r = rangoConsecutivo(fechasPermiso.get(`${f.asesora.id}|${d.estatus}`) ?? [d.fecha], d.fecha);
         if (r.total > 1) texto += ` · del ${diaMes(r.inicio)} al ${diaMes(r.fin)} (día ${r.posicion} de ${r.total})`;
-        if (d.nota) texto += ` · ${d.nota}`;
         if (d.estatus === "vacaciones" || d.estatus === "incapacidad") texto += ` · regresa el ${diaMes(sumarDias(r.fin, 1))}`;
         if (d.marcasEnPermiso) return { texto: `${texto} · Tiene marcas este día: ¿trabajó pese al permiso?`, tono: "warn" };
         return { texto, tono: "info" };
@@ -484,6 +515,13 @@ export default function PanelPrincipal({ recargar = 0, arriba, onMes }: { recarg
     if (r.total <= 1) return "";
     const regreso = d.estatus === "libre" ? "" : ` · regresa el ${diaMes(sumarDias(r.fin, 1))}`;
     return `del ${diaMes(r.inicio)} al ${diaMes(r.fin)} (día ${r.posicion} de ${r.total})${regreso}`;
+  }
+
+  // Rango exacto (desde/hasta) del permiso vigente de un dia, para precargar el editor y poder eliminarlo o corregirlo.
+  function rangoPermisoDia(f: FilaAsesora, d: DiaCalculado): { tipo: TipoPermiso; desde: string; hasta: string; nota: string | null } | null {
+    if (d.estatus !== "libre" && d.estatus !== "vacaciones" && d.estatus !== "incapacidad") return null;
+    const r = rangoConsecutivo(fechasPermiso.get(`${f.asesora.id}|${d.estatus}`) ?? [d.fecha], d.fecha);
+    return { tipo: d.estatus, desde: r.inicio, hasta: r.fin, nota: d.nota };
   }
 
   // Lo que pasó cada día del mes con esta asesora (para el detalle bajo su calendario). Los permisos seguidos van en una sola fila.
@@ -890,10 +928,14 @@ export default function PanelPrincipal({ recargar = 0, arriba, onMes }: { recarg
                         </span>
                         {f.asesora.activo && (
                           <button
-                            onClick={() => setEditandoHoyId(editandoHoyId === f.asesora.id ? null : f.asesora.id)}
+                            onClick={() => {
+                              const abrir = editandoHoyId !== f.asesora.id;
+                              setEditandoHoyId(abrir ? f.asesora.id : null);
+                              setModoHoy(null);
+                            }}
                             className="text-[#6B6D6E]"
-                            title="Corregir la hora de hoy"
-                            aria-label={`Corregir la hora de hoy de ${f.asesora.nombre}`}
+                            title="Corregir horas o marcar libre/vacaciones/incapacidad"
+                            aria-label={`Corregir la hora de hoy o marcar un permiso para ${f.asesora.nombre}`}
                           >
                             <IconoLapiz size={13} />
                           </button>
@@ -915,21 +957,65 @@ export default function PanelPrincipal({ recargar = 0, arriba, onMes }: { recarg
                     )}
 
                     {editandoHoyId === f.asesora.id && dDia && (
-                      <CorregirHoras
-                        asesoraId={f.asesora.id}
-                        nombre={f.asesora.nombre}
-                        fecha={hoy}
-                        entrada={dDia.entrada}
-                        salida={dDia.salida}
-                        entradaOriginal={dDia.entradaOriginal}
-                        salidaOriginal={dDia.salidaOriginal}
-                        motivoPrevio={dDia.motivoCorreccion}
-                        onGuardado={() => {
-                          setEditandoHoyId(null);
-                          recargarTodo();
-                        }}
-                        onCerrar={() => setEditandoHoyId(null)}
-                      />
+                      <div className="space-y-2">
+                        <div className="flex gap-1.5">
+                          <button
+                            onClick={() => setModoHoy((m) => (m === "horas" ? null : "horas"))}
+                            className={`flex-1 rounded-lg py-1.5 text-[11.5px] font-bold ${
+                              modoHoy === "horas" ? "bg-[#0B5F6C] text-white" : "bg-[#E4F7F9] text-[#0B5F6C]"
+                            }`}
+                          >
+                            Corregir horas
+                          </button>
+                          <button
+                            onClick={() => setModoHoy((m) => (m === "permiso" ? null : "permiso"))}
+                            className={`flex-1 rounded-lg py-1.5 text-[11.5px] font-bold ${
+                              modoHoy === "permiso" ? "bg-[#0B5F6C] text-white" : "bg-[#E4F7F9] text-[#0B5F6C]"
+                            }`}
+                          >
+                            {rangoPermisoDia(f, dDia) ? "Editar permiso" : "Libre / Vacaciones / Incapacidad"}
+                          </button>
+                        </div>
+                        {modoHoy === "horas" && (
+                          <CorregirHoras
+                            asesoraId={f.asesora.id}
+                            nombre={f.asesora.nombre}
+                            fecha={hoy}
+                            entrada={dDia.entrada}
+                            salida={dDia.salida}
+                            entradaOriginal={dDia.entradaOriginal}
+                            salidaOriginal={dDia.salidaOriginal}
+                            motivoPrevio={dDia.motivoCorreccion}
+                            onGuardado={() => {
+                              setEditandoHoyId(null);
+                              setModoHoy(null);
+                              recargarTodo();
+                            }}
+                            onCerrar={() => setModoHoy(null)}
+                          />
+                        )}
+                        {modoHoy === "permiso" && (() => {
+                          const info = rangoPermisoDia(f, dDia);
+                          return (
+                            <EditorPermiso
+                              asesoraId={f.asesora.id}
+                              nombre={f.asesora.nombre}
+                              fecha={hoy}
+                              tipoInicial={info?.tipo}
+                              desdeInicial={info?.desde}
+                              hastaInicial={info?.hasta}
+                              notaInicial={info?.nota ?? undefined}
+                              existente={!!info}
+                              onGuardado={() => {
+                                setEditandoHoyId(null);
+                                setModoHoy(null);
+                                recargarTodo();
+                              }}
+                              onCerrar={() => setModoHoy(null)}
+                            />
+                          );
+                        })()}
+                      </div>
                     )}
                   </div>
 
@@ -1190,6 +1276,7 @@ export default function PanelPrincipal({ recargar = 0, arriba, onMes }: { recarg
                                   fila={filaSel}
                                   dia={diaSel}
                                   detallePermiso={detallePermiso(filaSel, diaSel)}
+                                  permisoInfo={rangoPermisoDia(filaSel, diaSel)}
                                   onCorregido={recargarTodo}
                                   onCerrar={() => setSeleccion(null)}
                                 />
