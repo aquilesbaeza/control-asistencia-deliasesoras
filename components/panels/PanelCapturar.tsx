@@ -362,9 +362,7 @@ export default function PanelCapturar({ onGuardado }: { onGuardado?: () => void 
           onClick={() => setManualAbierto((v) => !v)}
           aria-label={manualAbierto ? "Cerrar marca manual" : "Agregar una marca manual"}
           title="Marca manual (sin foto)"
-          className={`flex-none w-14 rounded-2xl border-2 text-xl ${
-            manualAbierto ? "bg-[#0B5F6C] border-[#0B5F6C] text-white" : "bg-white border-[#1EA6B8] text-[#0B5F6C]"
-          }`}
+          className={`flex-none w-12 grid place-items-center ${manualAbierto ? "text-[#0B5F6C]" : "text-[#6B6D6E]"}`}
         >
           <IconoLapiz size={22} />
         </button>
