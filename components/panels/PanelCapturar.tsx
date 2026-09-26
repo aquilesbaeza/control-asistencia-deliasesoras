@@ -6,6 +6,7 @@ import VisorMarca, { type ItemCaptura } from "@/components/VisorMarca";
 import { claveMarca } from "@/lib/asistencia";
 import { ahoraCR } from "@/lib/tiempo";
 import { IconoCamara, IconoLapiz } from "@/components/Iconos";
+import SelectorHora from "@/components/SelectorHora";
 
 type Asesora = { id: string; nombre: string; punto: string };
 type Candidato = Asesora & { score: number };
@@ -515,9 +516,9 @@ export default function PanelCapturar({ onGuardado }: { onGuardado?: () => void 
                 </option>
               ))}
             </select>
-            <div className="grid grid-cols-2 gap-2">
-              <input type="date" value={manualFecha} onChange={(e) => setManualFecha(e.target.value)} className="rounded border border-[#DDE7E8] p-2 text-[12px]" />
-              <input type="time" value={manualHora} onChange={(e) => setManualHora(e.target.value)} className="rounded border border-[#DDE7E8] p-2 text-[12px]" />
+            <input type="date" value={manualFecha} onChange={(e) => setManualFecha(e.target.value)} className="w-full rounded border border-[#DDE7E8] p-2 text-[12px]" />
+            <div className="flex justify-center py-1">
+              <SelectorHora valor={manualHora} onCambio={setManualHora} />
             </div>
             <div className="flex gap-1.5">
               {(["entrada", "salida"] as const).map((t) => (

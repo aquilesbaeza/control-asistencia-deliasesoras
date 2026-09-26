@@ -19,11 +19,7 @@ export default function Home() {
         <PanelPrincipal
           recargar={version}
           onMes={setMes}
-          arriba={
-            <div className="rounded-xl border-2 border-[#1EA6B8] bg-white p-2.5">
-              <PanelCapturar onGuardado={() => setVersion((v) => v + 1)} />
-            </div>
-          }
+          arriba={<PanelCapturar onGuardado={() => setVersion((v) => v + 1)} />}
         />
       </main>
     </div>
