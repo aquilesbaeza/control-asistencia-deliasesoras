@@ -4,8 +4,6 @@ import { useState } from "react";
 import type { Asesora } from "@/lib/tipos";
 import { mensajeAmable } from "@/lib/mensajes";
 
-// Requiere un <datalist id="lista-puntos"> en la pagina con los puntos existentes.
-
 /**
  * Quita a una asesora: si no tiene historial se borra; si ya tiene marcas se oculta y
  * conserva sus reportes anteriores. Devuelve un mensaje de error, o null si salio bien.
@@ -32,79 +30,92 @@ export async function quitarAsesora(
   return null;
 }
 
-/** Formulario para mover a una asesora de punto y/o cambiar su horario o ingreso. */
+/** Selector de punto: lista los puntos existentes (para elegir uno ya usado) y permite escribir uno nuevo. */
+function CampoPunto({ puntos, valor, onCambio }: { puntos: string[]; valor: string; onCambio: (v: string) => void }) {
+  const [otro, setOtro] = useState(!!valor && !puntos.includes(valor));
+  if (otro) {
+    return (
+      <div className="flex gap-1.5 mt-0.5">
+        <input
+          value={valor}
+          onChange={(e) => onCambio(e.target.value)}
+          placeholder="Nombre del punto"
+          className="flex-1 min-w-0 rounded border border-[#DDE7E8] p-2 text-[13px] normal-case font-normal text-[#14181A]"
+        />
+        {puntos.length > 0 && (
+          <button type="button" onClick={() => setOtro(false)} className="flex-none rounded border border-[#DDE7E8] px-2 text-[11.5px] text-[#0B5F6C] font-semibold">
+            Elegir de la lista
+          </button>
+        )}
+      </div>
+    );
+  }
+  return (
+    <select
+      value={valor}
+      onChange={(e) => {
+        if (e.target.value === "__otro__") setOtro(true);
+        else onCambio(e.target.value);
+      }}
+      className="mt-0.5 w-full rounded border border-[#DDE7E8] p-2 text-[13px] normal-case font-normal text-[#14181A]"
+    >
+      {!valor && <option value="">-- Elige el punto --</option>}
+      {!puntos.includes(valor) && valor && <option value={valor}>{valor}</option>}
+      {puntos.map((p) => (
+        <option key={p} value={p}>
+          {p}
+        </option>
+      ))}
+      <option value="__otro__">+ Otro punto (escribir)</option>
+    </select>
+  );
+}
+
+/** Formulario para mover a una asesora de punto (por ejemplo, ante una eventualidad). */
 export function FormMoverAsesora({
   asesora,
+  puntos,
   onCambio,
   onAviso,
   onCerrar,
 }: {
   asesora: Asesora;
+  puntos: string[];
   onCambio: () => void;
   onAviso: (mensaje: string) => void;
   onCerrar: () => void;
 }) {
   const [punto, setPunto] = useState(asesora.punto);
-  const [hora, setHora] = useState(asesora.hora_entrada?.slice(0, 5) ?? "");
-  const [ingreso, setIngreso] = useState(asesora.fecha_ingreso ?? "");
   const [error, setError] = useState<string | null>(null);
 
   async function guardar() {
     if (!punto.trim()) return;
     setError(null);
-    // Solo se envia lo que cambio.
-    const cambios: Record<string, string | null> = {};
-    if (punto.trim() !== asesora.punto) cambios.punto = punto.trim();
-    if ((hora || null) !== (asesora.hora_entrada?.slice(0, 5) ?? null)) cambios.hora_entrada = hora || null;
-    if ((ingreso || null) !== (asesora.fecha_ingreso ?? null)) cambios.fecha_ingreso = ingreso || null;
-    if (Object.keys(cambios).length === 0) {
+    if (punto.trim() === asesora.punto) {
       onCerrar();
       return;
     }
     const resp = await fetch(`/api/asesoras/${asesora.id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(cambios),
+      body: JSON.stringify({ punto: punto.trim() }),
     });
     if (!resp.ok) {
       const data = await resp.json();
       setError(mensajeAmable(data.error, "No se pudo guardar."));
       return;
     }
-    onAviso(cambios.punto ? `${asesora.nombre} ahora está en ${cambios.punto}.` : "Cambios guardados.");
+    onAviso(`${asesora.nombre} ahora está en ${punto.trim()}.`);
     onCambio();
     onCerrar();
   }
 
   return (
     <div className="rounded-xl border-2 border-[#1EA6B8] bg-white p-3 space-y-2">
-      <div className="text-[12px] font-bold text-[#0B5F6C]">Mover a {asesora.nombre.split(" ")[0]} de punto o cambiar su horario</div>
+      <div className="text-[12px] font-bold text-[#0B5F6C]">Mover a {asesora.nombre.split(" ")[0]} a otro punto</div>
       <label className="block text-[10px] font-bold text-[#6B6D6E] uppercase tracking-wide">
         Punto
-        <input
-          list="lista-puntos"
-          value={punto}
-          onChange={(e) => setPunto(e.target.value)}
-          className="mt-0.5 w-full rounded border border-[#DDE7E8] p-2 text-[13px] normal-case font-normal text-[#14181A]"
-        />
-      </label>
-      <label className="block text-[10px] font-bold text-[#6B6D6E] uppercase tracking-wide">
-        Hora de entrada (solo si es fija)
-        <input
-          type="time"
-          value={hora}
-          onChange={(e) => setHora(e.target.value)}
-          className="mt-0.5 w-full rounded border border-[#DDE7E8] p-2 text-[13px] font-normal text-[#14181A]"
-        />
-      </label>
-      <label className="block text-[10px] font-bold text-[#6B6D6E] uppercase tracking-wide">
-        Fecha de ingreso (si es nueva)
-        <input
-          type="date"
-          value={ingreso}
-          onChange={(e) => setIngreso(e.target.value)}
-          className="mt-0.5 w-full rounded border border-[#DDE7E8] p-2 text-[13px] font-normal text-[#14181A]"
-        />
+        <CampoPunto puntos={puntos} valor={punto} onCambio={setPunto} />
       </label>
       {error && <p className="text-[12px] text-[#B23A3A] font-semibold">{error}</p>}
       <div className="flex gap-2">
@@ -120,7 +131,17 @@ export function FormMoverAsesora({
 }
 
 /** Formulario para agregar una asesora nueva. */
-export function NuevaAsesora({ onCambio, onCerrar, onAviso }: { onCambio: () => void; onCerrar: () => void; onAviso: (m: string) => void }) {
+export function NuevaAsesora({
+  puntos,
+  onCambio,
+  onCerrar,
+  onAviso,
+}: {
+  puntos: string[];
+  onCambio: () => void;
+  onCerrar: () => void;
+  onAviso: (m: string) => void;
+}) {
   const [nombre, setNombre] = useState("");
   const [punto, setPunto] = useState("");
   const [hora, setHora] = useState("");
@@ -169,13 +190,9 @@ export function NuevaAsesora({ onCambio, onCerrar, onAviso }: { onCambio: () => 
         placeholder="Nombre completo"
         className="block w-full rounded-lg border border-[#DDE7E8] p-2.5 text-[13px]"
       />
-      <input
-        list="lista-puntos"
-        value={punto}
-        onChange={(e) => setPunto(e.target.value)}
-        placeholder="Punto de venta"
-        className="block w-full rounded-lg border border-[#DDE7E8] p-2.5 text-[13px]"
-      />
+      <div>
+        <CampoPunto puntos={puntos} valor={punto} onCambio={setPunto} />
+      </div>
       <div className="grid grid-cols-2 gap-2">
         <label className="block text-[10.5px] font-bold text-[#6B6D6E] uppercase tracking-wide">
           Hora de entrada (si es fija)
