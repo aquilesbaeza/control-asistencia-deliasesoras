@@ -33,7 +33,7 @@ const ESTILO: Record<EstatusDia, { etiqueta: string; fondo: string; texto: strin
 // Acento general de la app (botones, "hoy" en el calendario).
 const ACENTO = "#0B5F6C";
 
-type Kpi = "asistencia" | "ausencia" | "faltaMarca" | "jornadaIncompleta" | "incapacidad" | "vacaciones" | "libre";
+type Kpi = "asistencia" | "ausencia" | "faltaMarca" | "jornadaIncompleta" | "incapacidad" | "vacaciones" | "libre" | "feriado";
 type Tono = "ok" | "warn" | "info";
 type FiltroDia = Kpi;
 
@@ -46,11 +46,12 @@ const COLOR_FILTRO: Record<FiltroDia, { fondo: string; texto: string }> = {
   incapacidad: { fondo: "#7B61D6", texto: "#FFFFFF" },
   vacaciones: { fondo: "#4FB8E8", texto: "#0B3A41" },
   libre: { fondo: "#9AA3A4", texto: "#FFFFFF" },
+  feriado: { fondo: "#3A3B3C", texto: "#FFFFFF" },
 };
 const ORDEN_CATEGORIA: FiltroDia[] = ["ausencia", "faltaMarca", "jornadaIncompleta", "incapacidad", "vacaciones", "libre", "asistencia"];
 
-/** Si el dia cumple el filtro/indicador elegido. */
-function cumpleFiltro(filtro: FiltroDia, d: DiaCalculado, hoy: string): boolean {
+/** Si el dia cumple el filtro/indicador elegido. fechasFeriado solo hace falta para el filtro "feriado". */
+function cumpleFiltro(filtro: FiltroDia, d: DiaCalculado, hoy: string, fechasFeriado: Set<string> = new Set()): boolean {
   switch (filtro) {
     case "asistencia":
       return d.estatus === "asistencia" || d.estatus === "enJornada";
@@ -65,6 +66,9 @@ function cumpleFiltro(filtro: FiltroDia, d: DiaCalculado, hoy: string): boolean 
     case "vacaciones":
     case "libre":
       return d.estatus === filtro;
+    case "feriado":
+      // El feriado se trabaja de forma opcional: solo cuenta quien marco entrada o salida ese dia.
+      return fechasFeriado.has(d.fecha) && (!!d.entrada || !!d.salida);
   }
 }
 
@@ -84,6 +88,7 @@ const KPIS: { id: Kpi; etiqueta: string }[] = [
   { id: "incapacidad", etiqueta: "Incapacidad" },
   { id: "vacaciones", etiqueta: "Vacaciones" },
   { id: "libre", etiqueta: "Libre" },
+  { id: "feriado", etiqueta: "Feriado trabajado" },
 ];
 
 function mesAnterior(mes: string): string {
@@ -395,18 +400,18 @@ export default function PanelPrincipal({ recargar = 0, arriba, onMes }: { recarg
   const coincidencias = useMemo(() => {
     const porAsesora = new Map<string, Record<Kpi, DiaCalculado[]>>();
     const vacio = (): Record<Kpi, DiaCalculado[]> => ({
-      asistencia: [], ausencia: [], faltaMarca: [], jornadaIncompleta: [], incapacidad: [], vacaciones: [], libre: [],
+      asistencia: [], ausencia: [], faltaMarca: [], jornadaIncompleta: [], incapacidad: [], vacaciones: [], libre: [], feriado: [],
     });
     for (const f of filas) {
       const r = vacio();
       for (const d of f.dias) {
         if (d.fecha < rango.desde || d.fecha > rango.hasta) continue;
-        for (const k of KPIS) if (cumpleFiltro(k.id, d, hoy)) r[k.id].push(d);
+        for (const k of KPIS) if (cumpleFiltro(k.id, d, hoy, fechasFeriado)) r[k.id].push(d);
       }
       porAsesora.set(f.asesora.id, r);
     }
     return porAsesora;
-  }, [filas, rango, hoy]);
+  }, [filas, rango, hoy, fechasFeriado]);
 
   const totales = useMemo(() => {
     const t = {} as Record<Kpi, { personas: number; dias: number }>;
@@ -487,7 +492,7 @@ export default function PanelPrincipal({ recargar = 0, arriba, onMes }: { recarg
     const filas: FilaDetalle[] = [];
     let previa: FilaDetalle | null = null;
     for (const d of f.dias) {
-      if (filtro && !cumpleFiltro(filtro, d, hoy)) {
+      if (filtro && !cumpleFiltro(filtro, d, hoy, fechasFeriado)) {
         previa = null;
         continue;
       }
@@ -1059,7 +1064,7 @@ export default function PanelPrincipal({ recargar = 0, arriba, onMes }: { recarg
                               const cat = categoriaDia(d, hoy);
                               const col = cat ? COLOR_FILTRO[cat] : null;
                               // Sin filtro: cada dia con su color tenue segun su situacion. Con un filtro elegido, solo esos dias se ven a todo color.
-                              const resaltado = filtroEfectivo ? cumpleFiltro(filtroEfectivo, d, hoy) : false;
+                              const resaltado = filtroEfectivo ? cumpleFiltro(filtroEfectivo, d, hoy, fechasFeriado) : false;
                               const atenuado = !!filtroEfectivo && !resaltado;
                               return (
                                 <button
