@@ -19,7 +19,7 @@ import type { Asesora, Comentario, DiaEspecial, Feriado, Marca } from "@/lib/tip
 import { IconoCalendario, IconoComentario, IconoDocumento, IconoLapiz } from "@/components/Iconos";
 
 const ESTILO: Record<EstatusDia, { etiqueta: string; letra: string; fondo: string; texto: string }> = {
-  asistencia: { etiqueta: "Asistencia", letra: "A", fondo: "#1EA6B8", texto: "#FFFFFF" },
+  asistencia: { etiqueta: "Jornada completa", letra: "A", fondo: "#1EA6B8", texto: "#FFFFFF" },
   ausencia: { etiqueta: "Ausencia", letra: "X", fondo: "#FBE4E4", texto: "#B23A3A" },
   incapacidad: { etiqueta: "Incapacidad", letra: "I", fondo: "#CFF0F3", texto: "#0B5F6C" },
   libre: { etiqueta: "Libre", letra: "L", fondo: "#E4F7F9", texto: "#0F7A8A" },
@@ -45,9 +45,9 @@ const COLOR_FILTRO: Record<FiltroDia, { fondo: string; texto: string }> = {
   ausencia: { fondo: "#E5484D", texto: "#FFFFFF" },
   faltaMarca: { fondo: "#F5C518", texto: "#3A2F00" },
   jornadaIncompleta: { fondo: "#F0742A", texto: "#FFFFFF" },
-  incapacidad: { fondo: "#8E9A9C", texto: "#FFFFFF" },
+  incapacidad: { fondo: "#7B61D6", texto: "#FFFFFF" },
   vacaciones: { fondo: "#4FB8E8", texto: "#0B3A41" },
-  libre: { fondo: "#14C4B8", texto: "#FFFFFF" },
+  libre: { fondo: "#9AA3A4", texto: "#FFFFFF" },
 };
 const ORDEN_CATEGORIA: FiltroDia[] = ["ausencia", "faltaMarca", "jornadaIncompleta", "incapacidad", "vacaciones", "libre", "asistencia"];
 
@@ -181,6 +181,19 @@ function cumple(kpi: Kpi, d: DiaCalculado, hoy: string): boolean {
 type FilaAsesora = { asesora: Asesora; dias: DiaCalculado[]; resumen: ResumenMes };
 type Seleccion = { asesoraId: string; dia: number } | null;
 
+// Estilo del chip de estatus en el detalle del dia: usa el color de la categoria real (jornada
+// incompleta en naranja, falta marca en amarillo, etc.), no el color generico de "asistencia".
+function estiloChip(d: DiaCalculado): { etiqueta: string; fondo: string; texto: string } {
+  if (d.estatus === "asistencia" && d.horas !== null && d.horas < 8) {
+    return { etiqueta: "Jornada incompleta", ...COLOR_FILTRO.jornadaIncompleta };
+  }
+  if (d.estatus === "parcial") return { etiqueta: "Falta marca", ...COLOR_FILTRO.faltaMarca };
+  if (d.estatus === "asistencia" || d.estatus === "ausencia" || d.estatus === "libre" || d.estatus === "vacaciones" || d.estatus === "incapacidad") {
+    return { etiqueta: ESTILO[d.estatus].etiqueta, ...COLOR_FILTRO[d.estatus] };
+  }
+  return ESTILO[d.estatus];
+}
+
 function describirDia(d: DiaCalculado): string {
   const partes: string[] = [];
   if (d.estatus === "asistencia") {
@@ -219,19 +232,17 @@ function DetalleDia({
   fila,
   dia,
   detallePermiso,
-  permisoInfo,
   onCorregido,
   onCerrar,
 }: {
   fila: FilaAsesora;
   dia: DiaCalculado;
   detallePermiso: string;
-  permisoInfo: { tipo: TipoPermiso; desde: string; hasta: string; nota: string | null } | null;
   onCorregido: () => void;
   onCerrar: () => void;
 }) {
-  const estilo = ESTILO[dia.estatus];
-  const [modo, setModo] = useState<"horas" | "permiso" | null>(null);
+  const estilo = estiloChip(dia);
+  const [corrigiendo, setCorrigiendo] = useState(false);
   return (
     <div className="rounded-xl border-2 border-[#1EA6B8] bg-white p-3 space-y-2">
       <div className="flex items-start gap-2">
@@ -249,7 +260,7 @@ function DetalleDia({
         </span>
         <span className="flex-1 min-w-0 text-[12px] leading-snug">{[detallePermiso, describirDia(dia)].filter(Boolean).join(" · ")}</span>
         <button
-          onClick={() => setModo((m) => (m === "horas" ? null : "horas"))}
+          onClick={() => setCorrigiendo((v) => !v)}
           className="flex-none text-[#6B6D6E]"
           title="Corregir horas de entrada y salida"
           aria-label="Corregir horas de entrada y salida"
@@ -258,14 +269,7 @@ function DetalleDia({
         </button>
       </div>
 
-      <button
-        onClick={() => setModo((m) => (m === "permiso" ? null : "permiso"))}
-        className="w-full rounded-lg border border-dashed border-[#1EA6B8] text-[#0B5F6C] py-1.5 text-[11.5px] font-bold"
-      >
-        {permisoInfo ? "Editar libre, vacaciones o incapacidad" : "Marcar como libre, vacaciones o incapacidad"}
-      </button>
-
-      {modo === "horas" && (
+      {corrigiendo && (
         <CorregirHoras
           asesoraId={fila.asesora.id}
           nombre={fila.asesora.nombre}
@@ -276,27 +280,10 @@ function DetalleDia({
           salidaOriginal={dia.salidaOriginal}
           motivoPrevio={dia.motivoCorreccion}
           onGuardado={() => {
-            setModo(null);
+            setCorrigiendo(false);
             onCorregido();
           }}
-          onCerrar={() => setModo(null)}
-        />
-      )}
-      {modo === "permiso" && (
-        <EditorPermiso
-          asesoraId={fila.asesora.id}
-          nombre={fila.asesora.nombre}
-          fecha={dia.fecha}
-          tipoInicial={permisoInfo?.tipo}
-          desdeInicial={permisoInfo?.desde}
-          hastaInicial={permisoInfo?.hasta}
-          notaInicial={permisoInfo?.nota ?? undefined}
-          existente={!!permisoInfo}
-          onGuardado={() => {
-            setModo(null);
-            onCorregido();
-          }}
-          onCerrar={() => setModo(null)}
+          onCerrar={() => setCorrigiendo(false)}
         />
       )}
     </div>
@@ -621,6 +608,8 @@ export default function PanelPrincipal({ recargar = 0, arriba, onMes }: { recarg
   function alternarDiaPermiso(f: FilaAsesora, fecha: string) {
     const esAusenciaManual = diasEspeciales.some((d) => d.asesora_id === f.asesora.id && d.fecha === fecha && d.tipo === "ausencia");
     if (esAusenciaManual) return;
+    // Las vacaciones nunca le quitan el libre a una asesora: ese dia se queda libre, las vacaciones lo saltan.
+    if (permisoTipo === "vacaciones" && permisoInicial[fecha] === "libre") return;
     setPermisoSel((s) => ({ ...s, [fecha]: s[fecha] === permisoTipo ? null : permisoTipo }));
   }
 
@@ -1006,10 +995,12 @@ export default function PanelPrincipal({ recargar = 0, arriba, onMes }: { recarg
                               hastaInicial={info?.hasta}
                               notaInicial={info?.nota ?? undefined}
                               existente={!!info}
-                              onGuardado={() => {
-                                setEditandoHoyId(null);
-                                setModoHoy(null);
+                              onGuardado={(aviso) => {
                                 recargarTodo();
+                                if (!aviso) {
+                                  setEditandoHoyId(null);
+                                  setModoHoy(null);
+                                }
                               }}
                               onCerrar={() => setModoHoy(null)}
                             />
@@ -1099,6 +1090,9 @@ export default function PanelPrincipal({ recargar = 0, arriba, onMes }: { recarg
                                 const esAusenciaManual = diasEspeciales.some(
                                   (de) => de.asesora_id === f.asesora.id && de.fecha === d.fecha && de.tipo === "ausencia"
                                 );
+                                // Las vacaciones no le quitan el libre a nadie: ese dia no se puede tocar mientras se elige "Vacaciones".
+                                const esLibreProtegido = permisoTipo === "vacaciones" && permisoInicial[d.fecha] === "libre";
+                                const bloqueado = esAusenciaManual || esLibreProtegido;
                                 const tipoSel = permisoSel[d.fecha] ?? null;
                                 const colSel = tipoSel ? COLOR_FILTRO[tipoSel] : null;
                                 const cambiado = tipoSel !== (permisoInicial[d.fecha] ?? null);
@@ -1106,7 +1100,8 @@ export default function PanelPrincipal({ recargar = 0, arriba, onMes }: { recarg
                                   <button
                                     key={d.dia}
                                     onClick={() => alternarDiaPermiso(f, d.fecha)}
-                                    disabled={esAusenciaManual}
+                                    disabled={bloqueado}
+                                    title={esLibreProtegido ? "Ya es su día libre: las vacaciones no se lo quitan" : undefined}
                                     className="aspect-square relative grid place-items-center disabled:opacity-40"
                                     aria-label={`Día ${d.dia}: ${tipoSel ?? "sin marcar"}`}
                                   >
@@ -1114,7 +1109,7 @@ export default function PanelPrincipal({ recargar = 0, arriba, onMes }: { recarg
                                       className="w-[26px] h-[26px] grid place-items-center rounded-md text-[12.5px]"
                                       style={{
                                         background: colSel ? colSel.fondo : "transparent",
-                                        color: colSel ? colSel.texto : esAusenciaManual ? "#E5484D" : "#1C1C1E",
+                                        color: colSel ? colSel.texto : bloqueado ? "#E5484D" : "#1C1C1E",
                                         fontWeight: colSel || esHoy ? 700 : 500,
                                         boxShadow: cambiado
                                           ? "0 0 0 2px #FFFFFF, 0 0 0 3.5px #35DCEC"
@@ -1177,9 +1172,17 @@ export default function PanelPrincipal({ recargar = 0, arriba, onMes }: { recarg
                                   Cancelar
                                 </button>
                               </div>
-                              <p className="text-[11px] text-[#6B6D6E] leading-snug">
-                                Elige el tipo y toca los días de {f.asesora.nombre.split(" ")[0]} en el calendario.
-                              </p>
+                              <div className="rounded-lg bg-[#E4F7F9] p-2.5 space-y-1">
+                                <p className="text-[11px] text-[#0B5F6C] leading-snug">
+                                  1. Elige abajo si es <b>Libre</b>, <b>Vacaciones</b> o <b>Incapacidad</b>. 2. Toca los días de{" "}
+                                  {f.asesora.nombre.split(" ")[0]} en el calendario (puedes tocar varios). 3. Toca <b>Guardar</b> para que quede
+                                  registrado.
+                                </p>
+                                <p className="text-[10.5px] text-[#0F7A8A] leading-snug">
+                                  Si ya tiene un día libre y le cae una incapacidad, esta gana y el libre se pierde ese día. Si le cae en vacaciones,
+                                  el libre no se pierde: ese día se queda libre y las vacaciones lo saltan.
+                                </p>
+                              </div>
                               <div className="grid grid-cols-3 gap-1.5">
                                 {(
                                   [
@@ -1276,7 +1279,6 @@ export default function PanelPrincipal({ recargar = 0, arriba, onMes }: { recarg
                                   fila={filaSel}
                                   dia={diaSel}
                                   detallePermiso={detallePermiso(filaSel, diaSel)}
-                                  permisoInfo={rangoPermisoDia(filaSel, diaSel)}
                                   onCorregido={recargarTodo}
                                   onCerrar={() => setSeleccion(null)}
                                 />

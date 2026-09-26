@@ -62,7 +62,7 @@ export default function EditorPermiso({
   hastaInicial?: string;
   notaInicial?: string;
   existente: boolean; // ya hay un permiso registrado ahi (se puede eliminar)
-  onGuardado: () => void;
+  onGuardado: (aviso?: string) => void;
   onCerrar: () => void;
 }) {
   const [tipo, setTipo] = useState<TipoPermiso>(tipoInicial ?? "libre");
@@ -128,7 +128,8 @@ export default function EditorPermiso({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ asesora_id: asesoraId, tipo, fecha_desde: desde, fecha_hasta: hasta, nota: textoNota }),
       });
-      if (!r.ok) throw new Error((await r.json()).error ?? "No se pudo guardar");
+      const data = await r.json();
+      if (!r.ok) throw new Error(data.error ?? "No se pudo guardar");
       if (tipo !== "libre") {
         await fetch("/api/comentarios", {
           method: "POST",
@@ -141,7 +142,8 @@ export default function EditorPermiso({
           }),
         }).catch(() => {});
       }
-      onGuardado();
+      if (data.aviso) setMensaje(data.aviso);
+      onGuardado(data.aviso ?? undefined);
     } catch (err) {
       setError(err instanceof Error ? err.message : "No se pudo guardar");
     } finally {

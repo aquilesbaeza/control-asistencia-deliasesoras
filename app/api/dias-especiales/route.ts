@@ -64,16 +64,40 @@ export async function POST(req: NextRequest) {
   }
 
   const supabase = supabaseAdmin();
+
+  // Regla de Nuria: las vacaciones nunca quitan un libre ya establecido (ese dia se queda libre,
+  // las vacaciones simplemente lo saltan); una incapacidad si gana sobre el libre, porque no se elige.
+  let fechasAGuardar = fechas;
+  if (tipo === "vacaciones") {
+    const { data: existentes, error: errLibres } = await supabase
+      .from("dias_especiales")
+      .select("fecha")
+      .eq("asesora_id", asesora_id)
+      .eq("tipo", "libre")
+      .in("fecha", fechas);
+    if (errLibres) return NextResponse.json({ error: errLibres.message }, { status: 500 });
+    const libres = new Set((existentes ?? []).map((d) => d.fecha));
+    fechasAGuardar = fechas.filter((f) => !libres.has(f));
+  }
+
+  if (fechasAGuardar.length === 0) {
+    return NextResponse.json({ dias: [], aviso: "Esos días ya eran libres de esta asesora; las vacaciones no se los quitan." });
+  }
+
   const { data, error } = await supabase
     .from("dias_especiales")
     .upsert(
-      fechas.map((f) => ({ asesora_id, fecha: f, tipo, nota: nota || null })),
+      fechasAGuardar.map((f) => ({ asesora_id, fecha: f, tipo, nota: nota || null })),
       { onConflict: "asesora_id,fecha" }
     )
     .select();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  return NextResponse.json({ dias: data });
+  const salto = fechas.length - fechasAGuardar.length;
+  return NextResponse.json({
+    dias: data,
+    aviso: salto > 0 ? `${salto} día(s) ya eran libres de esta asesora y se dejaron así; las vacaciones los saltan.` : null,
+  });
 }
 
 // Quita un dia (?fecha=) o un rango (?desde=&hasta=) de una asesora.
