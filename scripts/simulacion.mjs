@@ -47,6 +47,11 @@ async function insertar(tabla, filas, ids) {
 async function limpiar() {
   if (!existsSync(RUTA_IDS)) { console.log("No hay simulacion sembrada (falta simulacion/ids.json)."); return; }
   const ids = JSON.parse(readFileSync(RUTA_IDS, "utf8"));
+  if (ids.horariosSimulados?.length) {
+    for (const id of ids.horariosSimulados) await supabase.from("asesoras").update({ hora_entrada: null }).eq("id", id);
+    console.log(`  asesoras.hora_entrada: ${ids.horariosSimulados.length} revertidas a sin horario fijo`);
+    delete ids.horariosSimulados;
+  }
   for (const [tabla, lista] of Object.entries(ids)) {
     for (let i = 0; i < lista.length; i += 150) {
       const { error } = await supabase.from(tabla).delete().in("id", lista.slice(i, i + 150));
@@ -62,8 +67,16 @@ async function sembrar() {
   if (existsSync(RUTA_IDS)) { console.log("Ya habia una simulacion sembrada; se limpia primero."); await limpiar(); }
 
   const { data: asesoras, error } = await supabase
-    .from("asesoras").select("id,nombre,punto").eq("activo", true).order("punto").order("nombre");
+    .from("asesoras").select("id,nombre,punto,hora_entrada").eq("activo", true).order("punto").order("nombre");
   if (error) throw error;
+
+  // Horario de entrada (08:00) para calcular tardias; solo a quien no tenga uno ya definido, para no pisar datos reales.
+  const idsHorario = [];
+  for (const a of asesoras) {
+    if (a.hora_entrada) continue;
+    const { error: eHor } = await supabase.from("asesoras").update({ hora_entrada: "08:00:00" }).eq("id", a.id);
+    if (!eHor) idsHorario.push(a.id);
+  }
 
   const azar = rng(2026);
   const marcas = [], especiales = [], comentarios = [];
@@ -191,7 +204,7 @@ async function sembrar() {
   );
 
   mkdirSync("simulacion", { recursive: true });
-  const ids = {};
+  const ids = { horariosSimulados: idsHorario };
   await insertar("marcas", marcas, ids);
   // Marcas corregidas por Nuria (guardan hora original y motivo); si aun falta la migracion v4 se cargan sin esos datos.
   {
@@ -214,7 +227,7 @@ async function sembrar() {
   writeFileSync(RUTA_IDS, JSON.stringify(ids));
   writeFileSync("simulacion/esperado.json", JSON.stringify({ hoy: HOY, esperado }));
 
-  console.log(`Sembrado ${MES} (hoy = ${HOY}): ${asesoras.length} asesoras, ${marcas.length} marcas, ${especiales.length} permisos, ${comentarios.length} comentarios.`);
+  console.log(`Sembrado ${MES} (hoy = ${HOY}): ${asesoras.length} asesoras, ${marcas.length} marcas, ${especiales.length} permisos, ${comentarios.length} comentarios, ${idsHorario.length} horario(s) 08:00 asignado(s).`);
   console.log("Escenarios:", JSON.stringify(c));
 }
 

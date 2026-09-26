@@ -88,37 +88,64 @@ export function FormMoverAsesora({
   onCerrar: () => void;
 }) {
   const [punto, setPunto] = useState(asesora.punto);
+  const [hora, setHora] = useState(asesora.hora_entrada?.slice(0, 5) ?? "");
+  const [mostrarHora, setMostrarHora] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   async function guardar() {
     if (!punto.trim()) return;
     setError(null);
-    if (punto.trim() === asesora.punto) {
+    const cambios: Record<string, string | null> = {};
+    if (punto.trim() !== asesora.punto) cambios.punto = punto.trim();
+    if ((hora || null) !== (asesora.hora_entrada?.slice(0, 5) ?? null)) cambios.hora_entrada = hora || null;
+    if (Object.keys(cambios).length === 0) {
       onCerrar();
       return;
     }
     const resp = await fetch(`/api/asesoras/${asesora.id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ punto: punto.trim() }),
+      body: JSON.stringify(cambios),
     });
     if (!resp.ok) {
       const data = await resp.json();
       setError(mensajeAmable(data.error, "No se pudo guardar."));
       return;
     }
-    onAviso(`${asesora.nombre} ahora está en ${punto.trim()}.`);
+    onAviso(cambios.punto ? `${asesora.nombre} ahora está en ${punto.trim()}.` : "Horario actualizado.");
     onCambio();
     onCerrar();
   }
 
   return (
     <div className="rounded-xl border-2 border-[#1EA6B8] bg-white p-3 space-y-2">
-      <div className="text-[12px] font-bold text-[#0B5F6C]">Mover a {asesora.nombre.split(" ")[0]} a otro punto</div>
+      <div className="text-[12px] font-bold text-[#0B5F6C]">Mover a {asesora.nombre.split(" ")[0]} o definir su horario</div>
       <label className="block text-[10px] font-bold text-[#6B6D6E] uppercase tracking-wide">
         Punto
         <CampoPunto puntos={puntos} valor={punto} onCambio={setPunto} />
       </label>
+      <div>
+        <div className="text-[10px] font-bold text-[#6B6D6E] uppercase tracking-wide mb-1">Hora de entrada esperada (para avisar tardías)</div>
+        <button
+          type="button"
+          onClick={() => setMostrarHora((v) => !v)}
+          className="w-full rounded border border-[#DDE7E8] p-2 text-[13px] text-left"
+        >
+          {hora ? horaAmPm(hora) : "Sin horario fijo (toca para definirlo)"}
+        </button>
+        {mostrarHora && (
+          <div className="mt-2 rounded-lg bg-[#F2F8F9] p-2.5 space-y-2">
+            <div className="flex justify-center">
+              <SelectorHora valor={hora || "08:00"} onCambio={setHora} />
+            </div>
+            {hora && (
+              <button type="button" onClick={() => setHora("")} className="w-full text-[11.5px] text-[#B23A3A] font-semibold">
+                Quitar horario fijo
+              </button>
+            )}
+          </div>
+        )}
+      </div>
       {error && <p className="text-[12px] text-[#B23A3A] font-semibold">{error}</p>}
       <div className="flex gap-2">
         <button onClick={guardar} className="flex-1 text-[12.5px] bg-[#0B5F6C] text-white py-2.5 rounded-lg font-semibold">

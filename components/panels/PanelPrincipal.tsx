@@ -33,7 +33,7 @@ const ESTILO: Record<EstatusDia, { etiqueta: string; fondo: string; texto: strin
 // Acento general de la app (botones, "hoy" en el calendario).
 const ACENTO = "#0B5F6C";
 
-type Kpi = "asistencia" | "ausencia" | "faltaMarca" | "jornadaIncompleta" | "incapacidad" | "vacaciones" | "libre" | "feriado";
+type Kpi = "asistencia" | "ausencia" | "faltaMarca" | "jornadaIncompleta" | "incapacidad" | "vacaciones" | "libre" | "feriado" | "tardias";
 type Tono = "ok" | "warn" | "info";
 type FiltroDia = Kpi;
 
@@ -47,6 +47,7 @@ const COLOR_FILTRO: Record<FiltroDia, { fondo: string; texto: string }> = {
   vacaciones: { fondo: "#4FB8E8", texto: "#0B3A41" },
   libre: { fondo: "#9AA3A4", texto: "#FFFFFF" },
   feriado: { fondo: "#3A3B3C", texto: "#FFFFFF" },
+  tardias: { fondo: "#D6409F", texto: "#FFFFFF" },
 };
 const ORDEN_CATEGORIA: FiltroDia[] = ["ausencia", "faltaMarca", "jornadaIncompleta", "incapacidad", "vacaciones", "libre", "asistencia"];
 
@@ -69,6 +70,8 @@ function cumpleFiltro(filtro: FiltroDia, d: DiaCalculado, hoy: string, fechasFer
     case "feriado":
       // El feriado se trabaja de forma opcional: solo cuenta quien marco entrada o salida ese dia.
       return fechasFeriado.has(d.fecha) && (!!d.entrada || !!d.salida);
+    case "tardias":
+      return d.minutosTarde !== null;
   }
 }
 
@@ -89,6 +92,7 @@ const KPIS: { id: Kpi; etiqueta: string }[] = [
   { id: "vacaciones", etiqueta: "Vacaciones" },
   { id: "libre", etiqueta: "Libre" },
   { id: "feriado", etiqueta: "Feriado trabajado" },
+  { id: "tardias", etiqueta: "Tardías" },
 ];
 
 function mesAnterior(mes: string): string {
@@ -113,6 +117,13 @@ function tituloDia(iso: string): string {
 
 function diaMes(iso: string): string {
   return `${Number(iso.split("-")[2])}/${Number(iso.split("-")[1])}`;
+}
+
+// 95 -> "1 h 35 min", 40 -> "40 min".
+function formatoMin(min: number): string {
+  const h = Math.floor(min / 60);
+  const m = min % 60;
+  return [h ? `${h} h` : null, m ? `${m} min` : null].filter(Boolean).join(" ") || "0 min";
 }
 
 type TipoPermiso = "libre" | "vacaciones" | "incapacidad";
@@ -400,7 +411,7 @@ export default function PanelPrincipal({ recargar = 0, arriba, onMes }: { recarg
   const coincidencias = useMemo(() => {
     const porAsesora = new Map<string, Record<Kpi, DiaCalculado[]>>();
     const vacio = (): Record<Kpi, DiaCalculado[]> => ({
-      asistencia: [], ausencia: [], faltaMarca: [], jornadaIncompleta: [], incapacidad: [], vacaciones: [], libre: [], feriado: [],
+      asistencia: [], ausencia: [], faltaMarca: [], jornadaIncompleta: [], incapacidad: [], vacaciones: [], libre: [], feriado: [], tardias: [],
     });
     for (const f of filas) {
       const r = vacio();
@@ -978,6 +989,11 @@ export default function PanelPrincipal({ recargar = 0, arriba, onMes }: { recarg
 
                   {expandida && (
                     <div className="border-t border-[#DDE7E8] p-3 space-y-2.5 bg-[#F8FBFB]">
+                      {f.resumen.tardes > 0 && (
+                        <p className="text-[11.5px] font-semibold" style={{ color: COLOR_FILTRO.tardias.fondo }}>
+                          ⏱ {formatoMin(f.resumen.minutosTardeTotal)} tarde en el mes ({f.resumen.tardes} día{f.resumen.tardes === 1 ? "" : "s"})
+                        </p>
+                      )}
                       {f.asesora.activo && (
                         <div className="flex justify-end">
                           <button

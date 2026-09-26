@@ -259,6 +259,7 @@ export function calcularMesAsesora(p: {
 
 export type ResumenMes = Record<EstatusDia, number> & {
   tardes: number;
+  minutosTardeTotal: number; // suma de los minutos tarde de todos los dias con tardanza, para el mes
   jornadasIncompletas: number; // con ambas marcas pero menos de 8 h efectivas
   horasEfectivas: number;
 };
@@ -267,11 +268,14 @@ export function resumirMes(dias: DiaCalculado[]): ResumenMes {
   const r: ResumenMes = {
     asistencia: 0, ausencia: 0, incapacidad: 0, libre: 0, vacaciones: 0,
     parcial: 0, enJornada: 0, feriado: 0, pendiente: 0, fuera: 0,
-    tardes: 0, jornadasIncompletas: 0, horasEfectivas: 0,
+    tardes: 0, minutosTardeTotal: 0, jornadasIncompletas: 0, horasEfectivas: 0,
   };
   for (const d of dias) {
     r[d.estatus]++;
-    if (d.minutosTarde !== null) r.tardes++;
+    if (d.minutosTarde !== null) {
+      r.tardes++;
+      r.minutosTardeTotal += d.minutosTarde;
+    }
     if (d.horas !== null) {
       r.horasEfectivas += d.horas;
       if (d.horas < HORAS_JORNADA_EFECTIVA) r.jornadasIncompletas++;
