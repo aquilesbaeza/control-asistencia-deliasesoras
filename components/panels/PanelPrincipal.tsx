@@ -368,8 +368,8 @@ export default function PanelPrincipal({ recargar = 0, arriba, onMes }: { recarg
     for (const d of diasEspeciales) especialesPor.set(d.asesora_id, [...(especialesPor.get(d.asesora_id) ?? []), d]);
 
     return asesoras
-      // Las quitadas solo aparecen en los meses donde tienen historial.
-      .filter((a) => a.activo || marcasPor.has(a.id) || especialesPor.has(a.id))
+      // Una asesora quitada nunca aparece en la lista principal; se busca en "Asesoras quitadas".
+      .filter((a) => a.activo)
       .sort((a, b) => a.punto.localeCompare(b.punto, "es") || a.nombre.localeCompare(b.nombre, "es"))
       .map((asesora) => {
         const dias = calcularMesAsesora({
