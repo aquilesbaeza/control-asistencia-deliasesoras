@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import PopupAnomalia from "@/components/PopupAnomalia";
 import VisorMarca, { type ItemCaptura } from "@/components/VisorMarca";
 import { claveMarca } from "@/lib/asistencia";
-import { ahoraCR } from "@/lib/tiempo";
+import { ahoraCR, horaAmPm } from "@/lib/tiempo";
 import { IconoCamara, IconoLapiz } from "@/components/Iconos";
 import SelectorHora from "@/components/SelectorHora";
 
@@ -450,7 +450,7 @@ export default function PanelCapturar({ onGuardado }: { onGuardado?: () => void 
                   </div>
                   {item.estado !== "leyendo" && (
                     <div className="text-[11.5px] text-[#6B6D6E] tabular-nums truncate">
-                      {item.tipo === "entrada" ? "Entrada" : "Salida"} · {item.hora} · {diaMes(item.fecha)}
+                      {item.tipo === "entrada" ? "Entrada" : "Salida"} · {horaAmPm(item.hora)} · {diaMes(item.fecha)}
                       {asesora ? ` · ${asesora.punto}` : ""}
                     </div>
                   )}

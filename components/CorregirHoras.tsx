@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { horaAMinutos, MINUTOS_JORNADA_TOTAL } from "@/lib/tiempo";
+import { horaAmPm, horaAMinutos, MINUTOS_JORNADA_TOTAL } from "@/lib/tiempo";
 import { mensajeAmable } from "@/lib/mensajes";
 import SelectorHora from "@/components/SelectorHora";
 
@@ -91,8 +91,8 @@ export default function CorregirHoras({
 
       {(entradaOriginal || salidaOriginal) && (
         <p className="text-[11.5px] text-[#0B5F6C] bg-[#E4F7F9] rounded-lg px-2.5 py-1.5 leading-snug">
-          Ya se había corregido antes. Según la foto: entrada {entradaOriginal ?? entrada ?? "—"}, salida{" "}
-          {salidaOriginal ?? salida ?? "—"}
+          Ya se había corregido antes. Según la foto: entrada {horaAmPm(entradaOriginal ?? entrada)}, salida{" "}
+          {horaAmPm(salidaOriginal ?? salida)}
           {motivoPrevio ? ` · ${motivoPrevio}` : ""}.
         </p>
       )}
@@ -112,7 +112,7 @@ export default function CorregirHoras({
             }`}
           >
             {etiqueta}
-            <span className="block text-[15px]">{valor || "--:--"}</span>
+            <span className="block text-[15px]">{valor ? horaAmPm(valor) : "--:--"}</span>
           </button>
         ))}
       </div>
@@ -135,7 +135,7 @@ export default function CorregirHoras({
           onClick={() => setNuevaSalida(salidaSugerida)}
           className="w-full rounded-lg bg-[#E4F7F9] text-[#0B5F6C] py-2 text-[12.5px] font-semibold"
         >
-          Completar la jornada (salida {salidaSugerida}, 9 h después de la entrada)
+          Completar la jornada (salida {horaAmPm(salidaSugerida)}, 9 h después de la entrada)
         </button>
       )}
 

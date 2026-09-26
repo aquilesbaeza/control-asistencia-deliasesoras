@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import SelectorHora from "@/components/SelectorHora";
 
 export type ItemCaptura = {
   id: number;
@@ -118,25 +119,21 @@ export default function VisorMarca({
           </div>
         )}
 
-        <div className="grid grid-cols-2 gap-2">
-          <label className="text-[10.5px] font-bold text-[#6B6D6E] uppercase tracking-wide">
-            Hora
-            <input
-              type="time"
-              value={item.hora}
-              onChange={(e) => onCambio({ hora: e.target.value, confirmado: true })}
-              className="mt-1 w-full rounded-lg border-2 border-[#1EA6B8] p-2.5 text-[18px] font-bold text-[#14181A]"
-            />
-          </label>
-          <label className="text-[10.5px] font-bold text-[#6B6D6E] uppercase tracking-wide">
-            Fecha
-            <input
-              type="date"
-              value={item.fecha}
-              onChange={(e) => onCambio({ fecha: e.target.value, confirmado: true })}
-              className="mt-1 w-full rounded-lg border border-[#DDE7E8] p-2.5 text-[14px] font-normal text-[#14181A]"
-            />
-          </label>
+        <label className="block text-[10.5px] font-bold text-[#6B6D6E] uppercase tracking-wide">
+          Fecha
+          <input
+            type="date"
+            value={item.fecha}
+            onChange={(e) => onCambio({ fecha: e.target.value, confirmado: true })}
+            className="mt-1 w-full rounded-lg border border-[#DDE7E8] p-2.5 text-[14px] font-normal text-[#14181A]"
+          />
+        </label>
+
+        <div>
+          <div className="text-[10.5px] font-bold text-[#6B6D6E] uppercase tracking-wide mb-1">Hora</div>
+          <div className="flex justify-center">
+            <SelectorHora valor={item.hora} onCambio={(hora) => onCambio({ hora, confirmado: true })} />
+          </div>
         </div>
 
         <label className="block text-[10.5px] font-bold text-[#6B6D6E] uppercase tracking-wide">

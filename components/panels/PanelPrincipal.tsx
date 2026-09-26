@@ -14,7 +14,7 @@ import {
   type EstatusDia,
   type ResumenMes,
 } from "@/lib/asistencia";
-import { ahoraCR, aSetiembre } from "@/lib/tiempo";
+import { ahoraCR, aSetiembre, horaAmPm } from "@/lib/tiempo";
 import type { Asesora, Comentario, DiaEspecial, Feriado, Marca } from "@/lib/tipos";
 import { IconoCalendario, IconoComentario, IconoDocumento, IconoLapiz } from "@/components/Iconos";
 
@@ -184,14 +184,14 @@ type Seleccion = { asesoraId: string; dia: number } | null;
 function describirDia(d: DiaCalculado): string {
   const partes: string[] = [];
   if (d.estatus === "asistencia") {
-    partes.push(`Entrada ${d.entrada} · Salida ${d.salida}`);
+    partes.push(`Entrada ${horaAmPm(d.entrada)} · Salida ${horaAmPm(d.salida)}`);
     if (d.horas !== null) partes.push(`${d.horas.toFixed(1)} h efectivas${d.horas < 8 ? " (jornada incompleta)" : ""}`);
     if (d.minutosTarde !== null) partes.push(`llegó ${d.minutosTarde} min tarde`);
   } else if (d.estatus === "parcial") {
-    partes.push(d.entrada ? `Pendiente la marca de salida (entrada ${d.entrada})` : `Pendiente la marca de entrada (salida ${d.salida})`);
+    partes.push(d.entrada ? `Pendiente la marca de salida (entrada ${horaAmPm(d.entrada)})` : `Pendiente la marca de entrada (salida ${horaAmPm(d.salida)})`);
     partes.push("Puedes corregir las horas aquí mismo");
   } else if (d.estatus === "enJornada") {
-    partes.push(`Ya marcó entrada (${d.entrada}); su jornada aún no termina`);
+    partes.push(`Ya marcó entrada (${horaAmPm(d.entrada)}); su jornada aún no termina`);
   } else if (d.estatus === "ausencia") {
     partes.push(d.manual ? "Ausencia registrada por Nuria" : "Sin marcas ese día");
   } else if (d.estatus === "feriado") {
@@ -205,11 +205,11 @@ function describirDia(d: DiaCalculado): string {
   }
   if (d.entradaOriginal || d.salidaOriginal) {
     partes.push(
-      `Horas ajustadas por Nuria (foto: entrada ${d.entradaOriginal ?? d.entrada ?? "—"}, salida ${d.salidaOriginal ?? d.salida ?? "—"})${d.motivoCorreccion ? ` · ${d.motivoCorreccion}` : ""}`
+      `Horas ajustadas por Nuria (foto: entrada ${horaAmPm(d.entradaOriginal ?? d.entrada)}, salida ${horaAmPm(d.salidaOriginal ?? d.salida)})${d.motivoCorreccion ? ` · ${d.motivoCorreccion}` : ""}`
     );
   }
   if (d.marcasEnPermiso) {
-    partes.push(`Ojo: tiene marcas ese día (entrada ${d.entrada ?? "—"}, salida ${d.salida ?? "—"}); ¿trabajó pese al permiso?`);
+    partes.push(`Ojo: tiene marcas ese día (entrada ${horaAmPm(d.entrada)}, salida ${horaAmPm(d.salida)}); ¿trabajó pese al permiso?`);
   }
   if (d.nota) partes.push(`Nota: ${d.nota}`);
   return partes.filter(Boolean).join(" · ");
@@ -924,7 +924,7 @@ export default function PanelPrincipal({ recargar = 0, arriba, onMes }: { recarg
                     {dDia && (
                       <div className="flex items-center flex-wrap gap-1.5">
                         <span className="text-[11.5px] tabular-nums text-[#3A3B3C]">
-                          Entrada {dDia.entrada ?? "—"} · Salida {dDia.salida ?? "—"}
+                          Entrada {horaAmPm(dDia.entrada)} · Salida {horaAmPm(dDia.salida)}
                         </span>
                         {f.asesora.activo && (
                           <button

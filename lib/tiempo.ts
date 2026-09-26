@@ -30,3 +30,13 @@ export function horaAMinutos(hora: string): number {
 
 /** Jornada completa entre entrada y salida: 8 horas efectivas + 1 de almuerzo. */
 export const MINUTOS_JORNADA_TOTAL = 9 * 60;
+
+/** "14:05" -> "2:05 p. m."; en toda la app las horas se muestran en 12 h, nunca en 24 h. */
+export function horaAmPm(hora: string | null | undefined): string {
+  if (!hora) return "—";
+  const [h, m] = hora.slice(0, 5).split(":").map(Number);
+  if (Number.isNaN(h) || Number.isNaN(m)) return hora;
+  const periodo = h >= 12 ? "p. m." : "a. m.";
+  const h12 = h % 12 === 0 ? 12 : h % 12;
+  return `${h12}:${String(m).padStart(2, "0")} ${periodo}`;
+}

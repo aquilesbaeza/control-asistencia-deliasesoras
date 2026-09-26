@@ -3,6 +3,8 @@
 import { useState } from "react";
 import type { Asesora } from "@/lib/tipos";
 import { mensajeAmable } from "@/lib/mensajes";
+import { horaAmPm } from "@/lib/tiempo";
+import SelectorHora from "@/components/SelectorHora";
 
 /**
  * Quita a una asesora: si no tiene historial se borra; si ya tiene marcas se oculta y
@@ -145,6 +147,7 @@ export function NuevaAsesora({
   const [nombre, setNombre] = useState("");
   const [punto, setPunto] = useState("");
   const [hora, setHora] = useState("");
+  const [mostrarHora, setMostrarHora] = useState(false);
   const [ingreso, setIngreso] = useState("");
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -193,25 +196,36 @@ export function NuevaAsesora({
       <div>
         <CampoPunto puntos={puntos} valor={punto} onCambio={setPunto} />
       </div>
-      <div className="grid grid-cols-2 gap-2">
-        <label className="block text-[10.5px] font-bold text-[#6B6D6E] uppercase tracking-wide">
-          Hora de entrada (si es fija)
-          <input
-            type="time"
-            value={hora}
-            onChange={(e) => setHora(e.target.value)}
-            className="mt-1 block w-full rounded-lg border border-[#DDE7E8] p-2.5 text-[13px] font-normal text-[#14181A]"
-          />
-        </label>
-        <label className="block text-[10.5px] font-bold text-[#6B6D6E] uppercase tracking-wide">
-          Fecha de ingreso
-          <input
-            type="date"
-            value={ingreso}
-            onChange={(e) => setIngreso(e.target.value)}
-            className="mt-1 block w-full rounded-lg border border-[#DDE7E8] p-2.5 text-[13px] font-normal text-[#14181A]"
-          />
-        </label>
+      <label className="block text-[10.5px] font-bold text-[#6B6D6E] uppercase tracking-wide">
+        Fecha de ingreso
+        <input
+          type="date"
+          value={ingreso}
+          onChange={(e) => setIngreso(e.target.value)}
+          className="mt-1 block w-full rounded-lg border border-[#DDE7E8] p-2.5 text-[13px] font-normal text-[#14181A]"
+        />
+      </label>
+      <div>
+        <div className="text-[10.5px] font-bold text-[#6B6D6E] uppercase tracking-wide mb-1">Hora de entrada (si es fija)</div>
+        <button
+          type="button"
+          onClick={() => setMostrarHora((v) => !v)}
+          className="w-full rounded-lg border border-[#DDE7E8] p-2.5 text-[13px] text-left"
+        >
+          {hora ? horaAmPm(hora) : "Sin hora fija (toca para elegir)"}
+        </button>
+        {mostrarHora && (
+          <div className="mt-2 rounded-lg bg-[#F2F8F9] p-2.5 space-y-2">
+            <div className="flex justify-center">
+              <SelectorHora valor={hora || "08:00"} onCambio={setHora} />
+            </div>
+            {hora && (
+              <button type="button" onClick={() => setHora("")} className="w-full text-[11.5px] text-[#B23A3A] font-semibold">
+                Quitar hora fija
+              </button>
+            )}
+          </div>
+        )}
       </div>
       {error && <p className="text-[12px] text-[#B23A3A] font-semibold">{error}</p>}
       <div className="flex gap-2">
