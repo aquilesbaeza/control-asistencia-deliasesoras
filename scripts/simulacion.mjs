@@ -100,7 +100,7 @@ async function sembrar() {
   };
   // Escenarios garantizados de HOY para ver todos los avisos: en jornada, sin entrada (pendiente), jornada completa y horas ajustadas.
   // Libre, vacaciones e incapacidad de hoy ya salen de los rangos de arriba (dia 2 de 7 de incapacidad, vacaciones del 16 al 27).
-  const hoyEscenarios = { 1: "enJornada", 3: "enJornada", 8: "pendiente", 10: "pendiente", 17: "pendiente", 18: "pendiente", 21: "completa", 22: "completa", 23: "ajustada", 24: "extra" };
+  const hoyEscenarios = { 1: "enJornada", 3: "enJornada", 8: "pendiente", 10: "pendiente", 17: "pendiente", 18: "tarde", 21: "completa", 22: "completa", 23: "ajustada", 24: "extra", 25: "tardeEnJornada" };
   const corregidas = { 8: [9], 12: [11], 17: [17], 24: [18] }; // salieron antes por una cita y Nuria completo la jornada
   const marcasCorregidas = [];
 
@@ -148,6 +148,13 @@ async function sembrar() {
         if (h === "enJornada") {
           // Entro hace ~1.5 h (nunca antes de las 05:00): su jornada aun no termina.
           marcas.push({ asesora_id: a.id, fecha, hora: hhmm(Math.max(300, AHORA_MIN - 90)), tipo: "entrada", origen: "ocr" });
+        } else if (h === "tardeEnJornada") {
+          // Entro tarde y sigue en jornada: se ve el aviso rojo de tardanza junto con "en jornada".
+          marcas.push({ asesora_id: a.id, fecha, hora: hhmm(Math.max(300, AHORA_MIN - 60)), tipo: "entrada", origen: "ocr" });
+        } else if (h === "tarde") {
+          // Entro 20 min tarde (con horario de 08:00) y ya completo su jornada.
+          marcas.push({ asesora_id: a.id, fecha, hora: hhmm(500), tipo: "entrada", origen: "ocr" });
+          marcas.push({ asesora_id: a.id, fecha, hora: hhmm(1040), tipo: "salida", origen: "ocr" });
         } else {
           marcas.push({ asesora_id: a.id, fecha, hora: hhmm(480), tipo: "entrada", origen: "ocr" });
           if (h === "completa") marcas.push({ asesora_id: a.id, fecha, hora: hhmm(1020), tipo: "salida", origen: "ocr" });
