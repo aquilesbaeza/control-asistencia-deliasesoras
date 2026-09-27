@@ -4,7 +4,6 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import PreguntaFeriados from "@/components/PreguntaFeriados";
 import CalendarioFeriados from "@/components/CalendarioFeriados";
 import HorarioGeneral from "@/components/HorarioGeneral";
-import LibreGeneral from "@/components/LibreGeneral";
 import ComentariosAsesora, { type FilaDetalle } from "@/components/ComentariosAsesora";
 import CorregirHoras from "@/components/CorregirHoras";
 import { AsesorasQuitadas, FormMoverAsesora, NuevaAsesora, quitarAsesora } from "@/components/AsesoraAcciones";
@@ -42,15 +41,15 @@ type FiltroDia = Kpi;
 
 // Un color por filtro (solo para el calendario y los chips de cada asesora, no para los 6 indicadores de arriba).
 const COLOR_FILTRO: Record<FiltroDia, { fondo: string; texto: string }> = {
-  asistencia: { fondo: "#3FAE6A", texto: "#FFFFFF" },
-  ausencia: { fondo: "#E5484D", texto: "#FFFFFF" },
-  faltaMarca: { fondo: "#F5C518", texto: "#3A2F00" },
-  jornadaIncompleta: { fondo: "#F0742A", texto: "#FFFFFF" },
-  incapacidad: { fondo: "#7B61D6", texto: "#FFFFFF" },
-  vacaciones: { fondo: "#4FB8E8", texto: "#0B3A41" },
-  libre: { fondo: "#9AA3A4", texto: "#FFFFFF" },
-  feriado: { fondo: "#3A3B3C", texto: "#FFFFFF" },
-  tardias: { fondo: "#D6409F", texto: "#FFFFFF" },
+  asistencia: { fondo: "#1E9E4A", texto: "#FFFFFF" },
+  ausencia: { fondo: "#D42C2C", texto: "#FFFFFF" },
+  faltaMarca: { fondo: "#F2C200", texto: "#3A2F00" },
+  jornadaIncompleta: { fondo: "#E8720C", texto: "#FFFFFF" },
+  incapacidad: { fondo: "#7B2FE0", texto: "#FFFFFF" },
+  vacaciones: { fondo: "#00AEEF", texto: "#0B3A41" },
+  libre: { fondo: "#5C6670", texto: "#FFFFFF" },
+  feriado: { fondo: "#2B2B2B", texto: "#FFFFFF" },
+  tardias: { fondo: "#D6197B", texto: "#FFFFFF" },
 };
 const ORDEN_CATEGORIA: FiltroDia[] = ["ausencia", "faltaMarca", "jornadaIncompleta", "incapacidad", "vacaciones", "libre", "asistencia"];
 
@@ -840,11 +839,7 @@ export default function PanelPrincipal({ recargar = 0, arriba, onMes }: { recarg
                 </div>
 
                 <div className="border-t border-[#DDE7E8] pt-3">
-                  <HorarioGeneral asesoras={asesoras} onCambio={recargarTodo} />
-                </div>
-
-                <div className="border-t border-[#DDE7E8] pt-3">
-                  <LibreGeneral asesoras={asesoras} diasEspeciales={diasEspeciales} mes={mes} onCambio={recargarTodo} />
+                  <HorarioGeneral asesoras={asesoras} diasEspeciales={diasEspeciales} mes={mes} onCambio={recargarTodo} />
                 </div>
               </div>
             )}
