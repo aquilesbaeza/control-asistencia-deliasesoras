@@ -772,16 +772,13 @@ export default function PanelPrincipal({ recargar = 0, arriba, onMes }: { recarg
                     }}
                     className="rounded-lg py-2 px-0.5 text-center"
                     style={{
-                      background: activo ? col.fondo : "#FFFFFF",
+                      background: activo ? col.fondo : `${col.fondo}33`,
                       color: activo ? col.texto : "#3A3B3C",
-                      border: `1.5px solid ${activo ? col.fondo : "#DDE7E8"}`,
+                      border: `1.5px solid ${col.fondo}`,
                     }}
                   >
                     <div className="font-extrabold text-[15px] leading-none">{personas}</div>
-                    <div className="text-[8.5px] font-bold leading-tight mt-1 flex items-center justify-center gap-1">
-                      {!activo && <span className="inline-block w-1.5 h-1.5 rounded-sm flex-none" style={{ background: col.fondo }} />}
-                      {k.etiqueta}
-                    </div>
+                    <div className="text-[8.5px] font-bold leading-tight mt-1">{k.etiqueta}</div>
                   </button>
                 );
               })}
