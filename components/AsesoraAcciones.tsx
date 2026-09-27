@@ -152,7 +152,7 @@ export function FormMoverAsesora({
         <div className="rounded-lg bg-[#F2F8F9] p-2.5 space-y-2">
           <div className="flex justify-center">
             <SelectorHora
-              valor={(mostrarHora === "entrada" ? hora : horaSalida) || "08:00"}
+              valor={(mostrarHora === "entrada" ? hora : horaSalida) || (mostrarHora === "entrada" ? "10:00" : "19:00")}
               onCambio={mostrarHora === "entrada" ? setHora : setHoraSalida}
             />
           </div>
@@ -263,7 +263,7 @@ export function NuevaAsesora({
         {mostrarHora && (
           <div className="mt-2 rounded-lg bg-[#F2F8F9] p-2.5 space-y-2">
             <div className="flex justify-center">
-              <SelectorHora valor={hora || "08:00"} onCambio={setHora} />
+              <SelectorHora valor={hora || "10:00"} onCambio={setHora} />
             </div>
             {hora && (
               <button type="button" onClick={() => setHora("")} className="w-full text-[11.5px] text-[#B23A3A] font-semibold">

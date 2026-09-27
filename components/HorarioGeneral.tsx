@@ -11,8 +11,8 @@ import SelectorHora from "@/components/SelectorHora";
  * especial una por una, con "Mover" en su tarjeta.
  */
 export default function HorarioGeneral({ asesoras, onCambio }: { asesoras: Asesora[]; onCambio: () => void }) {
-  const [entrada, setEntrada] = useState("08:00");
-  const [salida, setSalida] = useState("17:00");
+  const [entrada, setEntrada] = useState("10:00");
+  const [salida, setSalida] = useState("19:00");
   const [editando, setEditando] = useState<"entrada" | "salida" | null>(null);
   const [marcadas, setMarcadas] = useState<Set<string>>(new Set());
   const [guardando, setGuardando] = useState(false);
@@ -61,13 +61,12 @@ export default function HorarioGeneral({ asesoras, onCambio }: { asesoras: Aseso
   }
 
   return (
-    <details className="rounded-xl border border-[#DDE7E8] bg-white px-3 py-2.5">
-      <summary className="text-[12.5px] font-bold text-[#0B5F6C] cursor-pointer">Horario general (entrada y salida)</summary>
-      <div className="mt-2 space-y-2.5">
-        <p className="text-[11px] text-[#6B6D6E] leading-snug">
-          Define aquí el horario que usa la mayoría y marca a quiénes aplicárselo de una vez. A quien tenga un horario especial por la
-          tienda, no la marques: defínele el suyo con «Mover» en su tarjeta.
-        </p>
+    <div className="space-y-2.5">
+      <div className="text-[12px] font-bold text-[#0B5F6C]">Horario general (entrada y salida)</div>
+      <p className="text-[11px] text-[#6B6D6E] leading-snug">
+        Define aquí el horario que usa la mayoría y marca a quiénes aplicárselo de una vez. A quien tenga un horario especial por la
+        tienda, no la marques: defínele el suyo con «Mover» en su tarjeta.
+      </p>
 
         <div className="grid grid-cols-2 gap-2">
           <button
@@ -125,7 +124,6 @@ export default function HorarioGeneral({ asesoras, onCambio }: { asesoras: Aseso
         >
           {guardando ? "Aplicando…" : `Aplicar a ${marcadas.size || ""} marcada(s)`.replace("  ", " ")}
         </button>
-      </div>
-    </details>
+    </div>
   );
 }
