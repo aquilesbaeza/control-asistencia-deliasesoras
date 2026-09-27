@@ -244,10 +244,7 @@ function DetalleDia({
   return (
     <div className="rounded-xl border-2 border-[#1EA6B8] bg-white p-3 space-y-2">
       <div className="flex items-start gap-2">
-        <div className="flex-1 min-w-0">
-          <div className="text-[13px] font-bold">{fila.asesora.nombre}</div>
-          <div className="text-[11.5px] text-[#6B6D6E]">{tituloDia(dia.fecha)}</div>
-        </div>
+        <div className="flex-1 min-w-0 text-[11.5px] text-[#6B6D6E]">{tituloDia(dia.fecha)}</div>
         <button onClick={onCerrar} className="text-[12px] text-[#6B6D6E] font-semibold px-1">
           Cerrar
         </button>
@@ -296,8 +293,8 @@ function DetalleDia({
         />
       )}
       {!esPermiso && (
-        <button onClick={() => onEditarPermiso("vacaciones")} className="w-full text-[11px] font-semibold text-[#0F7A8A] text-left">
-          ¿Es vacaciones o incapacidad? Márcalo en el calendario
+        <button onClick={() => onEditarPermiso("libre")} className="w-full text-[11px] font-semibold text-[#0F7A8A] text-left">
+          ¿Es libre, vacaciones o incapacidad? Márcalo en el calendario
         </button>
       )}
     </div>
@@ -321,7 +318,7 @@ export default function PanelPrincipal({ recargar = 0, arriba, onMes }: { recarg
   const abiertaRef = useRef<HTMLDivElement | null>(null);
   const [moviendoId, setMoviendoId] = useState<string | null>(null);
   const [permisoAbiertoId, setPermisoAbiertoId] = useState<string | null>(null); // asesora cuyo calendario se esta editando (libre/vacaciones/incapacidad)
-  const [permisoTipo, setPermisoTipo] = useState<TipoPermiso>("vacaciones");
+  const [permisoTipo, setPermisoTipo] = useState<TipoPermiso>("libre");
   const [permisoInicial, setPermisoInicial] = useState<Record<string, TipoPermiso | null>>({});
   const [permisoSel, setPermisoSel] = useState<Record<string, TipoPermiso | null>>({});
   const [permisoComprobanteUrl, setPermisoComprobanteUrl] = useState<string | null>(null);
@@ -574,7 +571,7 @@ export default function PanelPrincipal({ recargar = 0, arriba, onMes }: { recarg
 
   // Libres, vacaciones e incapacidades se editan en el MISMO calendario (sin abrir uno aparte):
   // este modo hace que tocar un dia lo marque/desmarque con el tipo elegido, en vez de abrir el detalle de horas.
-  function abrirEdicionPermisos(f: FilaAsesora, tipoInicial: TipoPermiso = "vacaciones") {
+  function abrirEdicionPermisos(f: FilaAsesora, tipoInicial: TipoPermiso = "libre") {
     const inicial: Record<string, TipoPermiso | null> = {};
     for (const d of diasEspeciales) {
       if (d.asesora_id !== f.asesora.id) continue;
@@ -839,7 +836,7 @@ export default function PanelPrincipal({ recargar = 0, arriba, onMes }: { recarg
                 </div>
 
                 <div className="border-t border-[#DDE7E8] pt-3">
-                  <HorarioGeneral asesoras={asesoras} diasEspeciales={diasEspeciales} mes={mes} onCambio={recargarTodo} />
+                  <HorarioGeneral asesoras={asesoras} onCambio={recargarTodo} />
                 </div>
               </div>
             )}
@@ -1097,18 +1094,19 @@ export default function PanelPrincipal({ recargar = 0, arriba, onMes }: { recarg
                               </div>
                               <div className="rounded-lg bg-[#E4F7F9] p-2.5 space-y-1">
                                 <p className="text-[11px] text-[#0B5F6C] leading-snug">
-                                  1. Elige abajo si es <b>Vacaciones</b> o <b>Incapacidad</b>. 2. Toca los días de{" "}
+                                  1. Elige abajo si es <b>Libre</b>, <b>Vacaciones</b> o <b>Incapacidad</b>. 2. Toca los días de{" "}
                                   {f.asesora.nombre.split(" ")[0]} en el calendario (puedes tocar varios). 3. Toca <b>Guardar</b> para que quede
-                                  registrado. El día libre se define en «Feriados y horario del mes».
+                                  registrado.
                                 </p>
                                 <p className="text-[10.5px] text-[#0F7A8A] leading-snug">
                                   Si ya tiene un día libre y le cae una incapacidad, esta gana y el libre se pierde ese día. Si le cae en vacaciones,
                                   el libre no se pierde: ese día se queda libre y las vacaciones lo saltan.
                                 </p>
                               </div>
-                              <div className="grid grid-cols-2 gap-1.5">
+                              <div className="grid grid-cols-3 gap-1.5">
                                 {(
                                   [
+                                    ["libre", "Libre"],
                                     ["vacaciones", "Vacaciones"],
                                     ["incapacidad", "Incapacidad"],
                                   ] as [TipoPermiso, string][]
