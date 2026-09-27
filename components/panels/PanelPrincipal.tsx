@@ -2,6 +2,8 @@
 
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import PreguntaFeriados from "@/components/PreguntaFeriados";
+import CalendarioFeriados from "@/components/CalendarioFeriados";
+import HorarioGeneral from "@/components/HorarioGeneral";
 import ComentariosAsesora, { type FilaDetalle } from "@/components/ComentariosAsesora";
 import CorregirHoras from "@/components/CorregirHoras";
 import { AsesorasQuitadas, FormMoverAsesora, NuevaAsesora, quitarAsesora } from "@/components/AsesoraAcciones";
@@ -325,8 +327,6 @@ export default function PanelPrincipal({ recargar = 0, arriba, onMes }: { recarg
   const [seleccion, setSeleccion] = useState<Seleccion>(null);
   const [mostrarNueva, setMostrarNueva] = useState(false);
   const [aviso, setAviso] = useState<string | null>(null);
-  const [nuevoFeriadoFecha, setNuevoFeriadoFecha] = useState("");
-  const [nuevoFeriadoDesc, setNuevoFeriadoDesc] = useState("");
   const inicioRef = useRef<HTMLDivElement>(null);
 
   const mes = referencia.slice(0, 7);
@@ -524,23 +524,6 @@ export default function PanelPrincipal({ recargar = 0, arriba, onMes }: { recarg
       filas.push(previa);
     }
     return filas;
-  }
-
-  async function agregarFeriado() {
-    if (!nuevoFeriadoFecha) return;
-    await fetch("/api/feriados", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ fecha: nuevoFeriadoFecha, descripcion: nuevoFeriadoDesc || null }),
-    });
-    setNuevoFeriadoFecha("");
-    setNuevoFeriadoDesc("");
-    await cargar();
-  }
-
-  async function quitarFeriado(fecha: string) {
-    await fetch(`/api/feriados?fecha=${fecha}`, { method: "DELETE" });
-    await cargar();
   }
 
   function recargarTodo() {
@@ -793,36 +776,11 @@ export default function PanelPrincipal({ recargar = 0, arriba, onMes }: { recarg
                 Se trabajan de forma opcional: ese día solo se lista a quienes marcaron, y nadie cuenta como ausente. Los libres, vacaciones e
                 incapacidades se anotan en cada asesora (ícono de lápiz, junto a sus filtros).
               </p>
-              {feriados.length === 0 && <p className="text-[11.5px] text-[#6B6D6E]">Sin feriados definidos este mes.</p>}
-              {feriados.map((fe) => (
-                <div key={fe.id} className="flex items-center justify-between text-[12px] bg-[#F2F8F9] rounded-lg px-2.5 py-2">
-                  <span>
-                    {Number(fe.fecha.split("-")[2])} — {fe.descripcion || "Feriado"}
-                  </span>
-                  <button onClick={() => quitarFeriado(fe.fecha)} className="text-[#B23A3A] text-[11.5px] font-semibold">
-                    Quitar
-                  </button>
-                </div>
-              ))}
-              <div className="flex gap-2">
-                <input
-                  type="date"
-                  value={nuevoFeriadoFecha}
-                  onChange={(e) => setNuevoFeriadoFecha(e.target.value)}
-                  className="rounded-lg border border-[#DDE7E8] p-2 text-[12px] flex-1"
-                />
-                <input
-                  placeholder="Nombre (opcional)"
-                  value={nuevoFeriadoDesc}
-                  onChange={(e) => setNuevoFeriadoDesc(e.target.value)}
-                  className="rounded-lg border border-[#DDE7E8] p-2 text-[12px] flex-1"
-                />
-                <button onClick={agregarFeriado} className="rounded-lg bg-[#0B5F6C] text-white px-3.5 text-sm font-bold">
-                  +
-                </button>
-              </div>
+              <CalendarioFeriados mes={mes} feriados={feriados} onCambio={recargarTodo} />
             </div>
           </details>
+
+          <HorarioGeneral asesoras={asesoras} onCambio={recargarTodo} />
 
           {/* Asesoras: busqueda, filtro por punto y alta */}
           <div className="space-y-2">
@@ -906,6 +864,9 @@ export default function PanelPrincipal({ recargar = 0, arriba, onMes }: { recarg
                       <div className="flex items-center flex-wrap gap-1.5">
                         <span className="text-[11.5px] tabular-nums text-[#3A3B3C]">
                           Entrada {horaAmPm(dDia.entrada)} · Salida {horaAmPm(dDia.salida)}
+                          {dDia.minutosTarde !== null && (
+                            <span className="text-[#E5484D] font-bold"> ({dDia.minutosTarde} min tarde)</span>
+                          )}
                         </span>
                         {f.asesora.activo && (
                           <button

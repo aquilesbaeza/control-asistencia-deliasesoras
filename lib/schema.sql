@@ -48,6 +48,7 @@ create table if not exists feriados_confirmados (
 
 -- Horario de entrada por asesora (lo define Nuria).
 alter table asesoras add column if not exists hora_entrada time;
+alter table asesoras add column if not exists hora_salida time;
 alter table asesoras add column if not exists fecha_ingreso date;
 alter table asesoras add column if not exists fecha_baja date;
 

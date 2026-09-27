@@ -14,6 +14,9 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   if (body.hora_entrada === null || typeof body.hora_entrada === "string") {
     cambios.hora_entrada = body.hora_entrada || null;
   }
+  if (body.hora_salida === null || typeof body.hora_salida === "string") {
+    cambios.hora_salida = body.hora_salida || null;
+  }
   if (body.fecha_ingreso === null || typeof body.fecha_ingreso === "string") {
     cambios.fecha_ingreso = body.fecha_ingreso || null;
   }

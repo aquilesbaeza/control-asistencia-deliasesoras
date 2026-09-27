@@ -89,7 +89,8 @@ export function FormMoverAsesora({
 }) {
   const [punto, setPunto] = useState(asesora.punto);
   const [hora, setHora] = useState(asesora.hora_entrada?.slice(0, 5) ?? "");
-  const [mostrarHora, setMostrarHora] = useState(false);
+  const [horaSalida, setHoraSalida] = useState(asesora.hora_salida?.slice(0, 5) ?? "");
+  const [mostrarHora, setMostrarHora] = useState<"entrada" | "salida" | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   async function guardar() {
@@ -98,6 +99,7 @@ export function FormMoverAsesora({
     const cambios: Record<string, string | null> = {};
     if (punto.trim() !== asesora.punto) cambios.punto = punto.trim();
     if ((hora || null) !== (asesora.hora_entrada?.slice(0, 5) ?? null)) cambios.hora_entrada = hora || null;
+    if ((horaSalida || null) !== (asesora.hora_salida?.slice(0, 5) ?? null)) cambios.hora_salida = horaSalida || null;
     if (Object.keys(cambios).length === 0) {
       onCerrar();
       return;
@@ -124,28 +126,45 @@ export function FormMoverAsesora({
         Punto
         <CampoPunto puntos={puntos} valor={punto} onCambio={setPunto} />
       </label>
-      <div>
-        <div className="text-[10px] font-bold text-[#6B6D6E] uppercase tracking-wide mb-1">Hora de entrada esperada (para avisar tardías)</div>
-        <button
-          type="button"
-          onClick={() => setMostrarHora((v) => !v)}
-          className="w-full rounded border border-[#DDE7E8] p-2 text-[13px] text-left"
-        >
-          {hora ? horaAmPm(hora) : "Sin horario fijo (toca para definirlo)"}
-        </button>
-        {mostrarHora && (
-          <div className="mt-2 rounded-lg bg-[#F2F8F9] p-2.5 space-y-2">
-            <div className="flex justify-center">
-              <SelectorHora valor={hora || "08:00"} onCambio={setHora} />
-            </div>
-            {hora && (
-              <button type="button" onClick={() => setHora("")} className="w-full text-[11.5px] text-[#B23A3A] font-semibold">
-                Quitar horario fijo
-              </button>
-            )}
-          </div>
-        )}
+      <div className="grid grid-cols-2 gap-2">
+        <div>
+          <div className="text-[10px] font-bold text-[#6B6D6E] uppercase tracking-wide mb-1">Entrada (avisa tardías)</div>
+          <button
+            type="button"
+            onClick={() => setMostrarHora(mostrarHora === "entrada" ? null : "entrada")}
+            className="w-full rounded border border-[#DDE7E8] p-2 text-[12.5px] text-left"
+          >
+            {hora ? horaAmPm(hora) : "Sin definir"}
+          </button>
+        </div>
+        <div>
+          <div className="text-[10px] font-bold text-[#6B6D6E] uppercase tracking-wide mb-1">Salida</div>
+          <button
+            type="button"
+            onClick={() => setMostrarHora(mostrarHora === "salida" ? null : "salida")}
+            className="w-full rounded border border-[#DDE7E8] p-2 text-[12.5px] text-left"
+          >
+            {horaSalida ? horaAmPm(horaSalida) : "Sin definir"}
+          </button>
+        </div>
       </div>
+      {mostrarHora && (
+        <div className="rounded-lg bg-[#F2F8F9] p-2.5 space-y-2">
+          <div className="flex justify-center">
+            <SelectorHora
+              valor={(mostrarHora === "entrada" ? hora : horaSalida) || "08:00"}
+              onCambio={mostrarHora === "entrada" ? setHora : setHoraSalida}
+            />
+          </div>
+          <button
+            type="button"
+            onClick={() => (mostrarHora === "entrada" ? setHora("") : setHoraSalida(""))}
+            className="w-full text-[11.5px] text-[#B23A3A] font-semibold"
+          >
+            Quitar esta hora
+          </button>
+        </div>
+      )}
       {error && <p className="text-[12px] text-[#B23A3A] font-semibold">{error}</p>}
       <div className="flex gap-2">
         <button onClick={guardar} className="flex-1 text-[12.5px] bg-[#0B5F6C] text-white py-2.5 rounded-lg font-semibold">
