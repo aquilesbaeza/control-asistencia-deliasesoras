@@ -452,10 +452,12 @@ export default function PanelPrincipal({ recargar = 0, arriba, onMes }: { recarg
   function textoDia(f: FilaAsesora, d: DiaCalculado): { texto: string; tono: Tono } {
     const conCorreccion = d.entradaOriginal || d.salidaOriginal ? ` · Horas ajustadas por Nuria${d.motivoCorreccion ? ` (${d.motivoCorreccion})` : ""}` : "";
     switch (d.estatus) {
-      case "asistencia":
+      case "asistencia": {
+        const conTarde = d.minutosTarde !== null ? ` · llegó ${d.minutosTarde} min tarde` : "";
         return d.horas !== null && d.horas < 8
-          ? { texto: `Jornada de ${d.horas.toFixed(1)} h (menos de las 8 h efectivas)${conCorreccion}`, tono: "warn" }
-          : { texto: `Jornada completa · ${(d.horas ?? 0).toFixed(1)} h${conCorreccion}`, tono: "ok" };
+          ? { texto: `Jornada de ${d.horas.toFixed(1)} h (menos de las 8 h efectivas)${conTarde}${conCorreccion}`, tono: "warn" }
+          : { texto: `Jornada completa · ${(d.horas ?? 0).toFixed(1)} h${conTarde}${conCorreccion}`, tono: d.minutosTarde !== null ? "warn" : "ok" };
+      }
       case "parcial":
         return { texto: d.entrada ? "Pendiente la marca de salida" : "Pendiente la marca de entrada", tono: "warn" };
       case "enJornada":
@@ -520,7 +522,10 @@ export default function PanelPrincipal({ recargar = 0, arriba, onMes }: { recarg
       }
       // Los permisos muestran su rango completo; se quita el "(día n de m)" porque la fila ya abarca varios días.
       const limpio = esPermiso ? texto.replace(/ \(día \d+ de \d+\)/, "") : texto;
-      previa = { fecha: d.fecha, fin: d.fecha, texto: limpio, color: COLOR_FILTRO[cat].fondo, estatus: d.estatus };
+      // "Tardías" y "Feriado trabajado" no son la categoria propia del dia (esa sigue siendo asistencia):
+      // si se esta filtrando por uno de esos, se colorea con el color de ESE filtro.
+      const colorFiltrado = filtro === "tardias" || filtro === "feriado" ? COLOR_FILTRO[filtro].fondo : COLOR_FILTRO[cat].fondo;
+      previa = { fecha: d.fecha, fin: d.fecha, texto: limpio, color: colorFiltrado, estatus: d.estatus };
       filas.push(previa);
     }
     return filas;
@@ -1040,8 +1045,9 @@ export default function PanelPrincipal({ recargar = 0, arriba, onMes }: { recarg
 
                               const cat = categoriaDia(d, hoy);
                               const col = cat ? COLOR_FILTRO[cat] : null;
-                              // Sin filtro: cada dia con su color tenue segun su situacion. Con un filtro elegido, solo esos dias se ven a todo color.
+                              // Sin filtro: cada dia con su color tenue segun su situacion. Con un filtro elegido, solo esos dias se ven a todo color, con el color de ESE filtro.
                               const resaltado = filtroEfectivo ? cumpleFiltro(filtroEfectivo, d, hoy, fechasFeriado) : false;
+                              const colResaltado = filtroEfectivo ? COLOR_FILTRO[filtroEfectivo] : null;
                               const atenuado = !!filtroEfectivo && !resaltado;
                               return (
                                 <button
@@ -1055,8 +1061,8 @@ export default function PanelPrincipal({ recargar = 0, arriba, onMes }: { recarg
                                     className="w-[26px] h-[26px] grid place-items-center rounded-md text-[12.5px]"
                                     style={{
                                       // Hoy nunca lleva color de fondo, solo el recuadro que lo resalta.
-                                      background: esHoy ? "transparent" : resaltado && col ? col.fondo : col ? `${col.fondo}26` : "transparent",
-                                      color: !esHoy && resaltado && col ? col.texto : "#1C1C1E",
+                                      background: esHoy ? "transparent" : resaltado && colResaltado ? colResaltado.fondo : col ? `${col.fondo}26` : "transparent",
+                                      color: !esHoy && resaltado && colResaltado ? colResaltado.texto : "#1C1C1E",
                                       fontWeight: resaltado || esHoy ? 700 : 500,
                                       boxShadow: sel ? "0 0 0 2px #0B3A41" : esHoy ? `inset 0 0 0 2px ${ACENTO}` : "none",
                                     }}
