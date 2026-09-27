@@ -137,7 +137,7 @@ export default function ComentariosAsesora({
             <li
               key={i.clave}
               className="flex items-start gap-2 rounded-lg px-2.5 py-1.5 text-[12px] leading-snug"
-              style={{ background: i.color ? `${i.color}26` : "#F2F8F9" }}
+              style={{ background: i.color ? `${i.color}40` : "#F2F8F9" }}
             >
               <span className="flex-none w-[4.5rem] font-bold text-[#0F7A8A] tabular-nums">{cuando(i)}</span>
               <span className="flex-1 min-w-0">

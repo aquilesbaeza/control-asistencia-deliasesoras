@@ -10,21 +10,31 @@ function diasEnMes(mes: string): number {
   return new Date(anio, m, 0).getDate();
 }
 
+function mesAnterior(mes: string): string {
+  const [a, m] = mes.split("-").map(Number);
+  return new Date(Date.UTC(a, m - 2, 1)).toISOString().slice(0, 7);
+}
+
 // Lunes = 0 ... domingo = 6.
 function primerDiaSemana(mes: string): number {
   return (new Date(`${mes}-01T12:00:00`).getDay() + 6) % 7;
 }
 
 /**
- * Calendario para tocar los feriados del mes (igual que se marcan los libres/vacaciones/incapacidades,
- * para mantener un solo lenguaje visual en toda la app), con un nombre opcional para el proximo que se toque.
+ * Calendario para tocar los feriados del mes: mismo estilo que el calendario de cada asesora
+ * (encabezado con el mes y flechas, dias de los meses vecinos en gris), para un solo lenguaje
+ * visual en toda la app. Incluye un nombre opcional para el proximo feriado que se toque.
  */
 export default function CalendarioFeriados({
   mes,
+  etiquetaMes,
+  onMoverMes,
   feriados,
   onCambio,
 }: {
   mes: string; // YYYY-MM
+  etiquetaMes: string; // "setiembre de 2026"
+  onMoverMes?: (delta: 1 | -1) => void; // si no se pasa, el mes no se puede cambiar desde aqui
   feriados: Feriado[];
   onCambio: () => void;
 }) {
@@ -52,7 +62,20 @@ export default function CalendarioFeriados({
 
   return (
     <div className="space-y-2">
-      <div className="rounded-2xl overflow-hidden border border-[#E5E5EA] bg-white">
+      <div className="w-[228px] rounded-2xl overflow-hidden border border-[#E5E5EA] bg-white">
+        <div className="flex items-center justify-between px-2.5 py-2 border-b border-[#E5E5EA]">
+          <span className="text-[13px] font-semibold text-[#1C1C1E] capitalize">{etiquetaMes}</span>
+          {onMoverMes && (
+            <div className="flex flex-col -gap-1 leading-none">
+              <button onClick={() => onMoverMes(-1)} className="text-[11px] text-[#0F7A8A] px-1" aria-label="Mes anterior">
+                ▲
+              </button>
+              <button onClick={() => onMoverMes(1)} className="text-[11px] text-[#0F7A8A] px-1" aria-label="Mes siguiente">
+                ▼
+              </button>
+            </div>
+          )}
+        </div>
         <div className="grid grid-cols-7 text-center">
           {SEMANA.map((l) => (
             <div key={l} className="py-1.5 text-[9px] font-bold text-[#8E8E93]">
@@ -62,7 +85,9 @@ export default function CalendarioFeriados({
         </div>
         <div className="grid grid-cols-7">
           {Array.from({ length: primerDia }).map((_, i) => (
-            <div key={`v${i}`} className="aspect-square" />
+            <div key={`v${i}`} className="aspect-square grid place-items-center text-[11px] text-[#C7C7CC]">
+              {diasEnMes(mesAnterior(mes)) - primerDia + i + 1}
+            </div>
           ))}
           {Array.from({ length: totalDias }, (_, i) => `${mes}-${String(i + 1).padStart(2, "0")}`).map((fecha) => {
             const f = feriadosPorFecha.get(fecha);
@@ -85,6 +110,11 @@ export default function CalendarioFeriados({
               </button>
             );
           })}
+          {Array.from({ length: (7 - ((primerDia + totalDias) % 7)) % 7 }).map((_, i) => (
+            <div key={`f${i}`} className="aspect-square grid place-items-center text-[11px] text-[#C7C7CC]">
+              {i + 1}
+            </div>
+          ))}
         </div>
       </div>
       <input

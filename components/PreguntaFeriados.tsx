@@ -63,6 +63,7 @@ export default function PreguntaFeriados({
 
       <CalendarioFeriados
         mes={mes}
+        etiquetaMes={nombreMes}
         feriados={feriados}
         onCambio={async () => {
           await cargar();
