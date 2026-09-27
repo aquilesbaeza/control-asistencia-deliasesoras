@@ -45,11 +45,11 @@ const COLOR_FILTRO: Record<FiltroDia, { fondo: string; texto: string }> = {
   ausencia: { fondo: "#D42C2C", texto: "#FFFFFF" },
   faltaMarca: { fondo: "#F2C200", texto: "#3A2F00" },
   jornadaIncompleta: { fondo: "#E8720C", texto: "#FFFFFF" },
-  incapacidad: { fondo: "#7B2FE0", texto: "#FFFFFF" },
-  vacaciones: { fondo: "#00AEEF", texto: "#0B3A41" },
-  libre: { fondo: "#5C6670", texto: "#FFFFFF" },
-  feriado: { fondo: "#2B2B2B", texto: "#FFFFFF" },
-  tardias: { fondo: "#D6197B", texto: "#FFFFFF" },
+  incapacidad: { fondo: "#6E3FA3", texto: "#FFFFFF" },
+  vacaciones: { fondo: "#1B5FAE", texto: "#FFFFFF" },
+  libre: { fondo: "#6B6B6B", texto: "#FFFFFF" },
+  feriado: { fondo: "#1A1A1A", texto: "#FFFFFF" },
+  tardias: { fondo: "#C23B8C", texto: "#FFFFFF" },
 };
 const ORDEN_CATEGORIA: FiltroDia[] = ["ausencia", "faltaMarca", "jornadaIncompleta", "incapacidad", "vacaciones", "libre", "asistencia"];
 
