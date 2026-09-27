@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import PreguntaFeriados from "@/components/PreguntaFeriados";
 import CalendarioFeriados from "@/components/CalendarioFeriados";
 import HorarioGeneral from "@/components/HorarioGeneral";
+import LibreGeneral from "@/components/LibreGeneral";
 import ComentariosAsesora, { type FilaDetalle } from "@/components/ComentariosAsesora";
 import CorregirHoras from "@/components/CorregirHoras";
 import { AsesorasQuitadas, FormMoverAsesora, NuevaAsesora, quitarAsesora } from "@/components/AsesoraAcciones";
@@ -296,8 +297,8 @@ function DetalleDia({
         />
       )}
       {!esPermiso && (
-        <button onClick={() => onEditarPermiso("libre")} className="w-full text-[11px] font-semibold text-[#0F7A8A] text-left">
-          ¿Es libre, vacaciones o incapacidad? Márcalo en el calendario
+        <button onClick={() => onEditarPermiso("vacaciones")} className="w-full text-[11px] font-semibold text-[#0F7A8A] text-left">
+          ¿Es vacaciones o incapacidad? Márcalo en el calendario
         </button>
       )}
     </div>
@@ -321,7 +322,7 @@ export default function PanelPrincipal({ recargar = 0, arriba, onMes }: { recarg
   const abiertaRef = useRef<HTMLDivElement | null>(null);
   const [moviendoId, setMoviendoId] = useState<string | null>(null);
   const [permisoAbiertoId, setPermisoAbiertoId] = useState<string | null>(null); // asesora cuyo calendario se esta editando (libre/vacaciones/incapacidad)
-  const [permisoTipo, setPermisoTipo] = useState<TipoPermiso>("libre");
+  const [permisoTipo, setPermisoTipo] = useState<TipoPermiso>("vacaciones");
   const [permisoInicial, setPermisoInicial] = useState<Record<string, TipoPermiso | null>>({});
   const [permisoSel, setPermisoSel] = useState<Record<string, TipoPermiso | null>>({});
   const [permisoComprobanteUrl, setPermisoComprobanteUrl] = useState<string | null>(null);
@@ -574,7 +575,7 @@ export default function PanelPrincipal({ recargar = 0, arriba, onMes }: { recarg
 
   // Libres, vacaciones e incapacidades se editan en el MISMO calendario (sin abrir uno aparte):
   // este modo hace que tocar un dia lo marque/desmarque con el tipo elegido, en vez de abrir el detalle de horas.
-  function abrirEdicionPermisos(f: FilaAsesora, tipoInicial: TipoPermiso = "libre") {
+  function abrirEdicionPermisos(f: FilaAsesora, tipoInicial: TipoPermiso = "vacaciones") {
     const inicial: Record<string, TipoPermiso | null> = {};
     for (const d of diasEspeciales) {
       if (d.asesora_id !== f.asesora.id) continue;
@@ -841,6 +842,10 @@ export default function PanelPrincipal({ recargar = 0, arriba, onMes }: { recarg
                 <div className="border-t border-[#DDE7E8] pt-3">
                   <HorarioGeneral asesoras={asesoras} onCambio={recargarTodo} />
                 </div>
+
+                <div className="border-t border-[#DDE7E8] pt-3">
+                  <LibreGeneral asesoras={asesoras} diasEspeciales={diasEspeciales} mes={mes} onCambio={recargarTodo} />
+                </div>
               </div>
             )}
           </div>
@@ -967,26 +972,6 @@ export default function PanelPrincipal({ recargar = 0, arriba, onMes }: { recarg
 
                   {expandida && (
                     <div className="border-t border-[#DDE7E8] p-3 space-y-2.5 bg-[#F8FBFB]">
-                      {f.asesora.activo && (
-                        <div className="flex gap-1.5">
-                          <button
-                            onClick={() => setMoviendoId(moviendoId === f.asesora.id ? null : f.asesora.id)}
-                            className="flex-none rounded-lg border border-[#DDE7E8] bg-white text-[#0B5F6C] px-2.5 py-1.5 text-[11px] font-semibold"
-                          >
-                            Mover
-                          </button>
-                          <button
-                            onClick={async () => {
-                              const error = await quitarAsesora(f.asesora, setAviso);
-                              if (error === null) recargarTodo();
-                              else if (error !== "cancelado") setAviso(error);
-                            }}
-                            className="flex-none rounded-lg border border-[#DDE7E8] bg-white text-[#B23A3A] px-2.5 py-1.5 text-[11px] font-semibold"
-                          >
-                            Quitar
-                          </button>
-                        </div>
-                      )}
                       {f.resumen.tardes > 0 && (
                         <button
                           onClick={() => setTardiasFiltroId((id) => (id === f.asesora.id ? null : f.asesora.id))}
@@ -1117,19 +1102,18 @@ export default function PanelPrincipal({ recargar = 0, arriba, onMes }: { recarg
                               </div>
                               <div className="rounded-lg bg-[#E4F7F9] p-2.5 space-y-1">
                                 <p className="text-[11px] text-[#0B5F6C] leading-snug">
-                                  1. Elige abajo si es <b>Libre</b>, <b>Vacaciones</b> o <b>Incapacidad</b>. 2. Toca los días de{" "}
+                                  1. Elige abajo si es <b>Vacaciones</b> o <b>Incapacidad</b>. 2. Toca los días de{" "}
                                   {f.asesora.nombre.split(" ")[0]} en el calendario (puedes tocar varios). 3. Toca <b>Guardar</b> para que quede
-                                  registrado.
+                                  registrado. El día libre se define en «Feriados y horario del mes».
                                 </p>
                                 <p className="text-[10.5px] text-[#0F7A8A] leading-snug">
                                   Si ya tiene un día libre y le cae una incapacidad, esta gana y el libre se pierde ese día. Si le cae en vacaciones,
                                   el libre no se pierde: ese día se queda libre y las vacaciones lo saltan.
                                 </p>
                               </div>
-                              <div className="grid grid-cols-3 gap-1.5">
+                              <div className="grid grid-cols-2 gap-1.5">
                                 {(
                                   [
-                                    ["libre", "Libre"],
                                     ["vacaciones", "Vacaciones"],
                                     ["incapacidad", "Incapacidad"],
                                   ] as [TipoPermiso, string][]
@@ -1238,6 +1222,26 @@ export default function PanelPrincipal({ recargar = 0, arriba, onMes }: { recarg
                         </div>
                       </div>
 
+                      {f.asesora.activo && (
+                        <div className="flex gap-1.5">
+                          <button
+                            onClick={() => setMoviendoId(moviendoId === f.asesora.id ? null : f.asesora.id)}
+                            className="flex-none rounded-lg border border-[#DDE7E8] bg-white text-[#0B5F6C] px-2.5 py-1.5 text-[11px] font-semibold"
+                          >
+                            Mover
+                          </button>
+                          <button
+                            onClick={async () => {
+                              const error = await quitarAsesora(f.asesora, setAviso);
+                              if (error === null) recargarTodo();
+                              else if (error !== "cancelado") setAviso(error);
+                            }}
+                            className="flex-none rounded-lg border border-[#DDE7E8] bg-white text-[#B23A3A] px-2.5 py-1.5 text-[11px] font-semibold"
+                          >
+                            Quitar
+                          </button>
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
