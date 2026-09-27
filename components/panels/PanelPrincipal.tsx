@@ -1078,6 +1078,34 @@ export default function PanelPrincipal({ recargar = 0, arriba, onMes }: { recarg
                               </div>
                             ))}
                           </div>
+                          {enEdicionPermisos && (
+                            <div className="grid grid-cols-3 gap-1 p-1.5 border-t border-[#E5E5EA]">
+                              {(
+                                [
+                                  ["libre", "Libre"],
+                                  ["vacaciones", "Vacaciones"],
+                                  ["incapacidad", "Incapacidad"],
+                                ] as [TipoPermiso, string][]
+                              ).map(([t, etiqueta]) => {
+                                const activo = permisoTipo === t;
+                                const col = COLOR_FILTRO[t];
+                                return (
+                                  <button
+                                    key={t}
+                                    onClick={() => setPermisoTipo(t)}
+                                    className="rounded-md py-1 text-[9.5px] font-bold leading-tight"
+                                    style={{
+                                      background: activo ? col.fondo : "#F2F8F9",
+                                      color: activo ? col.texto : "#3A3B3C",
+                                      border: `1.5px solid ${activo ? col.fondo : "#DDE7E8"}`,
+                                    }}
+                                  >
+                                    {etiqueta}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          )}
                         </div>
 
                         {/* Al costado del calendario: el detalle del dia y los comentarios, o el editor de permisos */}
@@ -1094,7 +1122,7 @@ export default function PanelPrincipal({ recargar = 0, arriba, onMes }: { recarg
                               </div>
                               <div className="rounded-lg bg-[#E4F7F9] p-2.5 space-y-1">
                                 <p className="text-[11px] text-[#0B5F6C] leading-snug">
-                                  1. Elige abajo si es <b>Libre</b>, <b>Vacaciones</b> o <b>Incapacidad</b>. 2. Toca los días de{" "}
+                                  1. Elige bajo el calendario si es <b>Libre</b>, <b>Vacaciones</b> o <b>Incapacidad</b>. 2. Toca los días de{" "}
                                   {f.asesora.nombre.split(" ")[0]} en el calendario (puedes tocar varios). 3. Toca <b>Guardar</b> para que quede
                                   registrado.
                                 </p>
@@ -1103,31 +1131,14 @@ export default function PanelPrincipal({ recargar = 0, arriba, onMes }: { recarg
                                   el libre no se pierde: ese día se queda libre y las vacaciones lo saltan.
                                 </p>
                               </div>
-                              <div className="grid grid-cols-3 gap-1.5">
-                                {(
-                                  [
-                                    ["libre", "Libre"],
-                                    ["vacaciones", "Vacaciones"],
-                                    ["incapacidad", "Incapacidad"],
-                                  ] as [TipoPermiso, string][]
-                                ).map(([t, etiqueta]) => {
+                              <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-[10.5px] font-semibold text-[#6B6D6E]">
+                                {(["libre", "vacaciones", "incapacidad"] as TipoPermiso[]).map((t) => {
                                   const n = Object.values(permisoSel).filter((v) => v === t).length;
-                                  const col = COLOR_FILTRO[t];
-                                  const activo = permisoTipo === t;
+                                  const etiqueta = t === "libre" ? "Libre" : t === "vacaciones" ? "Vacaciones" : "Incapacidad";
                                   return (
-                                    <button
-                                      key={t}
-                                      onClick={() => setPermisoTipo(t)}
-                                      className="rounded-lg py-2 text-[11.5px] font-bold"
-                                      style={{
-                                        background: activo ? col.fondo : "#FFFFFF",
-                                        color: activo ? col.texto : "#3A3B3C",
-                                        border: `1.5px solid ${activo ? col.fondo : "#DDE7E8"}`,
-                                      }}
-                                    >
-                                      {etiqueta}
-                                      <span className="block text-[10px] font-semibold opacity-80">{n} día(s)</span>
-                                    </button>
+                                    <span key={t}>
+                                      {etiqueta}: {n} día(s)
+                                    </span>
                                   );
                                 })}
                               </div>
