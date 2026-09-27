@@ -314,6 +314,7 @@ export default function PanelPrincipal({ recargar = 0, arriba, onMes }: { recarg
   const [feriadosConfirmados, setFeriadosConfirmados] = useState(false);
   const [cargando, setCargando] = useState(true);
   const [abierta, setAbierta] = useState<string | null>(null);
+  const abiertaRef = useRef<HTMLDivElement | null>(null);
   const [moviendoId, setMoviendoId] = useState<string | null>(null);
   const [permisoAbiertoId, setPermisoAbiertoId] = useState<string | null>(null); // asesora cuyo calendario se esta editando (libre/vacaciones/incapacidad)
   const [permisoTipo, setPermisoTipo] = useState<TipoPermiso>("libre");
@@ -328,6 +329,21 @@ export default function PanelPrincipal({ recargar = 0, arriba, onMes }: { recarg
   const [permisoError, setPermisoError] = useState<string | null>(null);
   const permisoInputRef = useRef<HTMLInputElement>(null);
   const [seleccion, setSeleccion] = useState<Seleccion>(null);
+
+  // Al hacer scroll y perder de vista la tarjeta abierta (queda tapada por el encabezado y los
+  // indicadores fijos), se contrae sola: asi el scroll queda mas liviano y se vuelve a ver el nombre.
+  useEffect(() => {
+    if (!abierta) return;
+    function alScrollear() {
+      const el = abiertaRef.current;
+      if (el && el.getBoundingClientRect().bottom < 175) {
+        setAbierta(null);
+        setSeleccion(null);
+      }
+    }
+    window.addEventListener("scroll", alScrollear, { passive: true });
+    return () => window.removeEventListener("scroll", alScrollear);
+  }, [abierta]);
   const [mostrarNueva, setMostrarNueva] = useState(false);
   const [feriadosAbiertos, setFeriadosAbiertos] = useState(false);
   const [aviso, setAviso] = useState<string | null>(null);
@@ -736,8 +752,8 @@ export default function PanelPrincipal({ recargar = 0, arriba, onMes }: { recarg
         <p className="text-sm text-[#6B6D6E]">Cargando…</p>
       ) : (
         <>
-          {/* Indicadores: son filtros; se quedan fijos al bajar, para no tener que volver arriba con muchas asesoras */}
-          <div className="sticky top-[56px] z-20 -mx-3 px-3 pt-2 pb-1.5 bg-[#F2F8F9]/95 backdrop-blur-sm">
+          {/* Indicadores: son filtros; se quedan fijos al llegar arriba, para no tener que subir con muchas asesoras */}
+          <div className="sticky top-[60px] z-20 -mx-3 px-2.5 pt-2 pb-1.5 bg-[#F2F8F9] shadow-[0_4px_6px_-2px_rgba(11,95,108,0.12)]">
             <div className="grid grid-cols-4 gap-1">
               {KPIS.map((k) => {
                 const activo = kpiActivo === k.id;
@@ -761,11 +777,11 @@ export default function PanelPrincipal({ recargar = 0, arriba, onMes }: { recarg
                 );
               })}
             </div>
-            {kpiActivo && (
-              <p className="text-[10.5px] text-[#6B6D6E] mt-1 leading-snug">
-                Mostrando solo a quienes cumplen esa condición. Toca de nuevo el indicador para ver a todas.
-              </p>
-            )}
+            <p className="text-[10.5px] text-[#6B6D6E] mt-1 leading-snug">
+              {kpiActivo
+                ? "Mostrando solo a quienes cumplen esa condición. Toca de nuevo el indicador para ver a todas."
+                : "Son filtros: toca uno para resaltar en su calendario a quienes cumplen esa condición."}
+            </p>
           </div>
 
           {/* Configuracion del mes: feriados (de todas) y el horario general, en un solo panel */}
@@ -878,6 +894,7 @@ export default function PanelPrincipal({ recargar = 0, arriba, onMes }: { recarg
               return (
                 <div
                   key={f.asesora.id}
+                  ref={f.asesora.id === abierta ? abiertaRef : undefined}
                   className="rounded-xl overflow-hidden"
                   style={{
                     border: kpiActivo ? "2px solid #35DCEC" : "1px solid #DDE7E8",
