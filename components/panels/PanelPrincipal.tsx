@@ -292,6 +292,11 @@ function DetalleDia({
           onCerrar={() => setCorrigiendoHoras(false)}
         />
       )}
+      {!esPermiso && (
+        <button onClick={() => onEditarPermiso("libre")} className="w-full text-[11px] font-semibold text-[#0F7A8A] text-left">
+          ¿Es libre, vacaciones o incapacidad? Márcalo en el calendario
+        </button>
+      )}
     </div>
   );
 }
@@ -322,10 +327,9 @@ export default function PanelPrincipal({ recargar = 0, arriba, onMes }: { recarg
   const [permisoMensaje, setPermisoMensaje] = useState<string | null>(null);
   const [permisoError, setPermisoError] = useState<string | null>(null);
   const permisoInputRef = useRef<HTMLInputElement>(null);
-  const [editandoHoyId, setEditandoHoyId] = useState<string | null>(null); // pencil junto a la hora de hoy
-  const [modoHoy, setModoHoy] = useState<"horas" | "permiso" | null>(null); // que se edita de hoy: horas o libre/vacaciones/incapacidad
   const [seleccion, setSeleccion] = useState<Seleccion>(null);
   const [mostrarNueva, setMostrarNueva] = useState(false);
+  const [feriadosAbiertos, setFeriadosAbiertos] = useState(false);
   const [aviso, setAviso] = useState<string | null>(null);
   const inicioRef = useRef<HTMLDivElement>(null);
 
@@ -493,13 +497,6 @@ export default function PanelPrincipal({ recargar = 0, arriba, onMes }: { recarg
     return `del ${diaMes(r.inicio)} al ${diaMes(r.fin)} (día ${r.posicion} de ${r.total})${regreso}`;
   }
 
-  // Rango exacto (desde/hasta) del permiso vigente de un dia, para precargar el editor y poder eliminarlo o corregirlo.
-  function rangoPermisoDia(f: FilaAsesora, d: DiaCalculado): { tipo: TipoPermiso; desde: string; hasta: string; nota: string | null } | null {
-    if (d.estatus !== "libre" && d.estatus !== "vacaciones" && d.estatus !== "incapacidad") return null;
-    const r = rangoConsecutivo(fechasPermiso.get(`${f.asesora.id}|${d.estatus}`) ?? [d.fecha], d.fecha);
-    return { tipo: d.estatus, desde: r.inicio, hasta: r.fin, nota: d.nota };
-  }
-
   // Lo que pasó cada día del mes con esta asesora (para el detalle bajo su calendario). Los permisos seguidos van en una sola fila.
   function filasDetalle(f: FilaAsesora, filtro: FiltroDia | null): FilaDetalle[] {
     const filas: FilaDetalle[] = [];
@@ -573,8 +570,6 @@ export default function PanelPrincipal({ recargar = 0, arriba, onMes }: { recarg
     setPermisoAbiertoId(f.asesora.id);
     setAbierta(f.asesora.id); // el calendario para tocar los dias vive en la tarjeta expandida
     setSeleccion(null);
-    setEditandoHoyId(null);
-    setModoHoy(null);
     setMoviendoId(null);
   }
 
@@ -741,49 +736,85 @@ export default function PanelPrincipal({ recargar = 0, arriba, onMes }: { recarg
         <p className="text-sm text-[#6B6D6E]">Cargando…</p>
       ) : (
         <>
-          {/* Indicadores: son filtros; tocar uno resalta a las asesoras que cumplen la condicion */}
-          <div className="grid grid-cols-4 gap-1">
-            {KPIS.map((k) => {
-              const activo = kpiActivo === k.id;
-              const { personas } = totales[k.id];
-              return (
-                <button
-                  key={k.id}
-                  onClick={() => {
-                    setKpiActivo(activo ? null : k.id);
-                  }}
-                  className="rounded-lg py-2 px-0.5 text-center"
-                  style={{
-                    background: activo ? ACENTO : "#FFFFFF",
-                    color: activo ? "#FFFFFF" : "#0B5F6C",
-                    border: `1.5px solid ${activo ? ACENTO : "#DDE7E8"}`,
-                  }}
-                >
-                  <div className="font-extrabold text-[15px] leading-none">{personas}</div>
-                  <div className="text-[8.5px] font-bold leading-tight mt-1">{k.etiqueta}</div>
-                </button>
-              );
-            })}
+          {/* Indicadores: son filtros; se quedan fijos al bajar, para no tener que volver arriba con muchas asesoras */}
+          <div className="sticky top-[56px] z-20 -mx-3 px-3 pt-2 pb-1.5 bg-[#F2F8F9]/95 backdrop-blur-sm">
+            <div className="grid grid-cols-4 gap-1">
+              {KPIS.map((k) => {
+                const activo = kpiActivo === k.id;
+                const { personas } = totales[k.id];
+                return (
+                  <button
+                    key={k.id}
+                    onClick={() => {
+                      setKpiActivo(activo ? null : k.id);
+                    }}
+                    className="rounded-lg py-2 px-0.5 text-center"
+                    style={{
+                      background: activo ? ACENTO : "#FFFFFF",
+                      color: activo ? "#FFFFFF" : "#0B5F6C",
+                      border: `1.5px solid ${activo ? ACENTO : "#DDE7E8"}`,
+                    }}
+                  >
+                    <div className="font-extrabold text-[15px] leading-none">{personas}</div>
+                    <div className="text-[8.5px] font-bold leading-tight mt-1">{k.etiqueta}</div>
+                  </button>
+                );
+              })}
+            </div>
+            {kpiActivo && (
+              <p className="text-[10.5px] text-[#6B6D6E] mt-1 leading-snug">
+                Mostrando solo a quienes cumplen esa condición. Toca de nuevo el indicador para ver a todas.
+              </p>
+            )}
           </div>
-          <p className="text-[11px] text-[#6B6D6E] -mt-1 leading-snug">
-            {kpiActivo
-              ? "Mostrando solo a quienes cumplen esa condición. Toca de nuevo el indicador para ver a todas."
-              : "Son filtros: toca uno para ver y resaltar en su calendario a quienes cumplen esa condición."}
-          </p>
 
           {/* Feriados del mes: son de todas, no de una asesora */}
-          <details className="rounded-xl border border-[#DDE7E8] bg-white px-3 py-2.5">
-            <summary className="text-[12.5px] font-bold text-[#0B5F6C] cursor-pointer">
-              Feriados de este mes{feriados.length > 0 ? ` (${feriados.length})` : ""}
-            </summary>
-            <div className="mt-2 space-y-2">
-              <p className="text-[11px] text-[#6B6D6E] leading-snug">
-                Se trabajan de forma opcional: ese día solo se lista a quienes marcaron, y nadie cuenta como ausente. Los libres, vacaciones e
-                incapacidades se anotan en cada asesora (ícono de lápiz, junto a sus filtros).
-              </p>
-              <CalendarioFeriados mes={mes} feriados={feriados} onCambio={recargarTodo} />
-            </div>
-          </details>
+          <div className="rounded-xl border border-[#DDE7E8] bg-white p-3">
+            <button
+              onClick={() => setFeriadosAbiertos((v) => !v)}
+              className="w-full flex items-center justify-between text-left"
+            >
+              <span className="text-[12.5px] font-bold text-[#0B5F6C]">
+                Feriados de este mes{feriados.length > 0 ? ` (${feriados.length})` : ""}
+              </span>
+              <span className="text-[#0F7A8A] text-[13px] font-bold">{feriadosAbiertos ? "−" : "+"}</span>
+            </button>
+            {feriadosAbiertos && (
+              <div className="mt-2 space-y-2">
+                <p className="text-[11px] text-[#6B6D6E] leading-snug">
+                  Se trabajan de forma opcional: ese día solo se lista a quienes marcaron, y nadie cuenta como ausente. Los libres,
+                  vacaciones e incapacidades se anotan en el calendario de cada asesora.
+                </p>
+                <div className="flex flex-wrap items-start gap-3">
+                  <div className="flex-none w-[228px]">
+                    <CalendarioFeriados mes={mes} feriados={feriados} onCambio={recargarTodo} />
+                  </div>
+                  <div className="flex-1 min-w-[160px] space-y-1.5">
+                    {feriados.length === 0 ? (
+                      <p className="text-[11.5px] text-[#6B6D6E]">Sin feriados definidos este mes.</p>
+                    ) : (
+                      feriados.map((fe) => (
+                        <div key={fe.id} className="flex items-center justify-between gap-2 bg-[#F2F8F9] rounded-lg px-2.5 py-2 text-[12px]">
+                          <span className="min-w-0 truncate">
+                            {Number(fe.fecha.split("-")[2])} — {fe.descripcion || "Feriado"}
+                          </span>
+                          <button
+                            onClick={async () => {
+                              await fetch(`/api/feriados?fecha=${fe.fecha}`, { method: "DELETE" });
+                              recargarTodo();
+                            }}
+                            className="flex-none text-[#B23A3A] text-[11px] font-semibold"
+                          >
+                            Quitar
+                          </button>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
 
           <HorarioGeneral asesoras={asesoras} onCambio={recargarTodo} />
 
@@ -811,6 +842,32 @@ export default function PanelPrincipal({ recargar = 0, arriba, onMes }: { recarg
               const filtroEfectivo: FiltroDia | null = kpiActivo;
               const dDia = mes === hoy.slice(0, 7) ? f.dias[idxDia] : undefined;
               const info = dDia ? textoDia(f, dDia) : null;
+              const diasFiltro = kpiActivo ? coincidencias.get(f.asesora.id)?.[kpiActivo]?.length ?? 0 : 0;
+              // Con un filtro activo, la tarjeta cerrada se ve comprimida (una linea) para recorrer muchos nombres sin tanto scroll.
+              if (kpiActivo && !expandida) {
+                return (
+                  <button
+                    key={f.asesora.id}
+                    onClick={() => alternarTarjeta(f, expandida)}
+                    className="w-full flex items-center gap-2 rounded-lg px-3 py-2 text-left"
+                    style={{ border: "1px solid #CFF0F3", background: "#FFFFFF" }}
+                  >
+                    <div className="flex-1 min-w-0">
+                      <div className="text-[12.5px] font-bold truncate">
+                        {f.asesora.nombre}
+                        {!f.asesora.activo && <span className="ml-1 text-[10px] text-[#6B6D6E] font-semibold">(quitada)</span>}
+                      </div>
+                      <div className="text-[10px] text-[#6B6D6E] truncate">{f.asesora.punto}</div>
+                    </div>
+                    <span
+                      className="flex-none text-[10.5px] font-bold px-2 py-0.5 rounded-full"
+                      style={{ background: `${COLOR_FILTRO[kpiActivo].fondo}22`, color: COLOR_FILTRO[kpiActivo].fondo }}
+                    >
+                      {diasFiltro} día{diasFiltro === 1 ? "" : "s"}
+                    </span>
+                  </button>
+                );
+              }
               return (
                 <div
                   key={f.asesora.id}
@@ -864,8 +921,8 @@ export default function PanelPrincipal({ recargar = 0, arriba, onMes }: { recarg
                       </button>
                     </div>
 
-                    {/* Hora de hoy, siempre a la vista, con lapiz para corregirla ahi mismo */}
-                    {dDia && (
+                    {/* Hora de hoy, de un vistazo mientras la tarjeta esta cerrada. Al abrirla, ese mismo dato ya se ve abajo, en su detalle. */}
+                    {dDia && !expandida && (
                       <div className="flex items-center flex-wrap gap-1.5">
                         <span className="text-[11.5px] tabular-nums text-[#3A3B3C]">
                           Entrada {horaAmPm(dDia.entrada)} · Salida {horaAmPm(dDia.salida)}
@@ -873,20 +930,6 @@ export default function PanelPrincipal({ recargar = 0, arriba, onMes }: { recarg
                             <span className="text-[#E5484D] font-bold"> ({dDia.minutosTarde} min tarde)</span>
                           )}
                         </span>
-                        {f.asesora.activo && (
-                          <button
-                            onClick={() => {
-                              const abrir = editandoHoyId !== f.asesora.id;
-                              setEditandoHoyId(abrir ? f.asesora.id : null);
-                              setModoHoy(null);
-                            }}
-                            className="text-[#6B6D6E]"
-                            title="Corregir horas o marcar libre/vacaciones/incapacidad"
-                            aria-label={`Corregir la hora de hoy o marcar un permiso para ${f.asesora.nombre}`}
-                          >
-                            <IconoLapiz size={13} />
-                          </button>
-                        )}
                         {info && info.texto && (
                           <span
                             className={`text-[10.5px] font-bold px-2 py-0.5 rounded-full ${
@@ -899,48 +942,6 @@ export default function PanelPrincipal({ recargar = 0, arriba, onMes }: { recarg
                           >
                             {info.texto}
                           </span>
-                        )}
-                      </div>
-                    )}
-
-                    {editandoHoyId === f.asesora.id && dDia && (
-                      <div className="space-y-2">
-                        <div className="flex gap-1.5">
-                          <button
-                            onClick={() => setModoHoy((m) => (m === "horas" ? null : "horas"))}
-                            className={`flex-1 rounded-lg py-1.5 text-[11.5px] font-bold ${
-                              modoHoy === "horas" ? "bg-[#0B5F6C] text-white" : "bg-[#E4F7F9] text-[#0B5F6C]"
-                            }`}
-                          >
-                            Corregir horas
-                          </button>
-                          <button
-                            onClick={() => {
-                              const info = rangoPermisoDia(f, dDia);
-                              abrirEdicionPermisos(f, info?.tipo ?? "libre");
-                            }}
-                            className="flex-1 rounded-lg py-1.5 text-[11.5px] font-bold bg-[#E4F7F9] text-[#0B5F6C]"
-                          >
-                            {rangoPermisoDia(f, dDia) ? "Editar en el calendario" : "Libre / Vacaciones / Incapacidad"}
-                          </button>
-                        </div>
-                        {modoHoy === "horas" && (
-                          <CorregirHoras
-                            asesoraId={f.asesora.id}
-                            nombre={f.asesora.nombre}
-                            fecha={hoy}
-                            entrada={dDia.entrada}
-                            salida={dDia.salida}
-                            entradaOriginal={dDia.entradaOriginal}
-                            salidaOriginal={dDia.salidaOriginal}
-                            motivoPrevio={dDia.motivoCorreccion}
-                            onGuardado={() => {
-                              setEditandoHoyId(null);
-                              setModoHoy(null);
-                              recargarTodo();
-                            }}
-                            onCerrar={() => setModoHoy(null)}
-                          />
                         )}
                       </div>
                     )}
@@ -960,20 +961,6 @@ export default function PanelPrincipal({ recargar = 0, arriba, onMes }: { recarg
                           ⏱ {formatoMin(f.resumen.minutosTardeTotal)} tarde en el mes ({f.resumen.tardes} día{f.resumen.tardes === 1 ? "" : "s"})
                         </p>
                       )}
-                      {f.asesora.activo && (
-                        <div className="flex justify-end">
-                          <button
-                            onClick={() => (enEdicionPermisos ? cerrarEdicionPermisos() : abrirEdicionPermisos(f))}
-                            className="flex-none w-7 h-7 rounded-lg grid place-items-center"
-                            style={{ background: enEdicionPermisos ? ACENTO : "#E4F7F9", color: enEdicionPermisos ? "#FFFFFF" : "#0B5F6C" }}
-                            title="Libres, vacaciones e incapacidades"
-                            aria-label={`Editar libres, vacaciones e incapacidades de ${f.asesora.nombre}`}
-                          >
-                            <IconoLapiz size={14} />
-                          </button>
-                        </div>
-                      )}
-
                       <div className="flex flex-wrap items-start gap-3">
                         {/* Un solo calendario: de lectura normalmente, o editando permisos cuando se toca el lapiz de arriba */}
                         <div className="flex-none w-[228px] rounded-2xl overflow-hidden border border-[#E5E5EA] bg-white">
