@@ -185,10 +185,11 @@ function estiloChip(d: DiaCalculado): { etiqueta: string; fondo: string; texto: 
   return ESTILO[d.estatus];
 }
 
-function describirDia(d: DiaCalculado): string {
+function describirDia(d: DiaCalculado, hoy: string): string {
   const partes: string[] = [];
   if (d.estatus === "asistencia") {
-    partes.push(`Entrada ${horaAmPm(d.entrada)} · Salida ${horaAmPm(d.salida)}`);
+    // Si es hoy, la hora ya se ve junto al nombre; para cualquier otro dia hace falta mostrarla aqui.
+    if (d.fecha !== hoy) partes.push(`Entrada ${horaAmPm(d.entrada)} · Salida ${horaAmPm(d.salida)}`);
     if (d.horas !== null) partes.push(`${d.horas.toFixed(1)} h efectivas${d.horas < 8 ? " (jornada incompleta)" : ""}`);
     if (d.minutosTarde !== null) partes.push(`llegó ${d.minutosTarde} min tarde`);
   } else if (d.estatus === "parcial") {
@@ -222,6 +223,7 @@ function describirDia(d: DiaCalculado): string {
 function DetalleDia({
   fila,
   dia,
+  hoy,
   detallePermiso,
   onEditarPermiso,
   onCorregido,
@@ -229,6 +231,7 @@ function DetalleDia({
 }: {
   fila: FilaAsesora;
   dia: DiaCalculado;
+  hoy: string;
   detallePermiso: string;
   onEditarPermiso: (tipo: TipoPermiso) => void;
   onCorregido: () => void;
@@ -253,7 +256,7 @@ function DetalleDia({
         <span className="flex-none rounded-full px-2.5 py-1 text-[11.5px] font-bold" style={{ background: estilo.fondo, color: estilo.texto }}>
           {estilo.etiqueta}
         </span>
-        <span className="flex-1 min-w-0 text-[12px] leading-snug">{[detallePermiso, describirDia(dia)].filter(Boolean).join(" · ")}</span>
+        <span className="flex-1 min-w-0 text-[12px] leading-snug">{[detallePermiso, describirDia(dia, hoy)].filter(Boolean).join(" · ")}</span>
         {esPermiso ? (
           <button
             onClick={() => onEditarPermiso(dia.estatus as TipoPermiso)}
@@ -305,6 +308,7 @@ export default function PanelPrincipal({ recargar = 0, arriba, onMes }: { recarg
   const [referencia, setReferencia] = useState(() => ahoraCR().fecha);
   // Solo se ve el mes: los indicadores cuentan todo el mes y cada asesora muestra su estado de hoy.
   const [kpiActivo, setKpiActivo] = useState<Kpi | null>(null);
+  const [tardiasFiltroId, setTardiasFiltroId] = useState<string | null>(null); // asesora cuyo acumulado de tardias se toco para resaltar
   // Filtro propio de cada tarjeta (botones del resumen); si no hay, manda el indicador de arriba.
   const [asesoras, setAsesoras] = useState<Asesora[]>([]);
   const [marcas, setMarcas] = useState<Marca[]>([]);
@@ -560,9 +564,10 @@ export default function PanelPrincipal({ recargar = 0, arriba, onMes }: { recarg
   }
 
   // Al abrir la tarjeta se ve su calendario con el dia elegido (hoy por defecto) ya seleccionado, listo para editar horas.
+  // Al abrir la tarjeta no se preselecciona ningun dia: el detalle del dia solo aparece si se toca uno en el calendario.
   function alternarTarjeta(f: FilaAsesora, expandida: boolean) {
     setAbierta(expandida ? null : f.asesora.id);
-    setSeleccion(expandida ? null : { asesoraId: f.asesora.id, dia: idxDia + 1 });
+    setSeleccion(null);
     setPermisoAbiertoId(null);
     setMoviendoId(null);
   }
@@ -754,10 +759,11 @@ export default function PanelPrincipal({ recargar = 0, arriba, onMes }: { recarg
         <>
           {/* Indicadores: son filtros; se quedan fijos al llegar arriba, para no tener que subir con muchas asesoras */}
           <div className="sticky top-[60px] z-20 -mx-3 px-2.5 pt-2 pb-1.5 bg-[#F2F8F9] shadow-[0_4px_6px_-2px_rgba(11,95,108,0.12)]">
-            <div className="grid grid-cols-4 gap-1">
+            <div className="grid grid-cols-3 gap-1">
               {KPIS.map((k) => {
                 const activo = kpiActivo === k.id;
                 const { personas } = totales[k.id];
+                const col = COLOR_FILTRO[k.id];
                 return (
                   <button
                     key={k.id}
@@ -766,13 +772,16 @@ export default function PanelPrincipal({ recargar = 0, arriba, onMes }: { recarg
                     }}
                     className="rounded-lg py-2 px-0.5 text-center"
                     style={{
-                      background: activo ? ACENTO : "#FFFFFF",
-                      color: activo ? "#FFFFFF" : "#0B5F6C",
-                      border: `1.5px solid ${activo ? ACENTO : "#DDE7E8"}`,
+                      background: activo ? col.fondo : "#FFFFFF",
+                      color: activo ? col.texto : "#3A3B3C",
+                      border: `1.5px solid ${activo ? col.fondo : "#DDE7E8"}`,
                     }}
                   >
                     <div className="font-extrabold text-[15px] leading-none">{personas}</div>
-                    <div className="text-[8.5px] font-bold leading-tight mt-1">{k.etiqueta}</div>
+                    <div className="text-[8.5px] font-bold leading-tight mt-1 flex items-center justify-center gap-1">
+                      {!activo && <span className="inline-block w-1.5 h-1.5 rounded-sm flex-none" style={{ background: col.fondo }} />}
+                      {k.etiqueta}
+                    </div>
                   </button>
                 );
               })}
@@ -860,7 +869,8 @@ export default function PanelPrincipal({ recargar = 0, arriba, onMes }: { recarg
             {filasVisibles.map((f) => {
               const expandida = abierta === f.asesora.id;
               const enEdicionPermisos = permisoAbiertoId === f.asesora.id;
-              const filtroEfectivo: FiltroDia | null = kpiActivo;
+              // El acumulado de tardias de cada tarjeta se puede tocar para resaltar solo esos dias en SU calendario, sin depender del indicador de arriba.
+              const filtroEfectivo: FiltroDia | null = tardiasFiltroId === f.asesora.id ? "tardias" : kpiActivo;
               const dDia = mes === hoy.slice(0, 7) ? f.dias[idxDia] : undefined;
               const info = dDia ? textoDia(f, dDia) : null;
               const diasFiltro = kpiActivo ? coincidencias.get(f.asesora.id)?.[kpiActivo]?.length ?? 0 : 0;
@@ -915,26 +925,6 @@ export default function PanelPrincipal({ recargar = 0, arriba, onMes }: { recarg
                         </div>
                         <div className="text-[11px] text-[#6B6D6E] mt-0.5">{f.asesora.punto}</div>
                       </button>
-                      {f.asesora.activo && (
-                        <>
-                          <button
-                            onClick={() => setMoviendoId(moviendoId === f.asesora.id ? null : f.asesora.id)}
-                            className="flex-none rounded-lg border border-[#DDE7E8] bg-white text-[#0B5F6C] px-2.5 py-1.5 text-[11px] font-semibold"
-                          >
-                            Mover
-                          </button>
-                          <button
-                            onClick={async () => {
-                              const error = await quitarAsesora(f.asesora, setAviso);
-                              if (error === null) recargarTodo();
-                              else if (error !== "cancelado") setAviso(error);
-                            }}
-                            className="flex-none rounded-lg border border-[#DDE7E8] bg-white text-[#B23A3A] px-2.5 py-1.5 text-[11px] font-semibold"
-                          >
-                            Quitar
-                          </button>
-                        </>
-                      )}
                       <button
                         onClick={() => alternarTarjeta(f, expandida)}
                         className="flex-none w-8 h-8 rounded-lg grid place-items-center"
@@ -945,11 +935,11 @@ export default function PanelPrincipal({ recargar = 0, arriba, onMes }: { recarg
                       </button>
                     </div>
 
-                    {/* Hora de hoy, de un vistazo mientras la tarjeta esta cerrada. Al abrirla, ese mismo dato ya se ve abajo, en su detalle. */}
-                    {dDia && !expandida && (
+                    {/* Hora de hoy, siempre a la par del nombre: solo los numeros, sin la palabra Entrada/Salida. */}
+                    {dDia && (
                       <div className="flex items-center flex-wrap gap-1.5">
                         <span className="text-[11.5px] tabular-nums text-[#3A3B3C]">
-                          Entrada {horaAmPm(dDia.entrada)} · Salida {horaAmPm(dDia.salida)}
+                          {horaAmPm(dDia.entrada)} · {horaAmPm(dDia.salida)}
                           {dDia.minutosTarde !== null && (
                             <span className="text-[#E5484D] font-bold"> ({dDia.minutosTarde} min tarde)</span>
                           )}
@@ -980,10 +970,35 @@ export default function PanelPrincipal({ recargar = 0, arriba, onMes }: { recarg
 
                   {expandida && (
                     <div className="border-t border-[#DDE7E8] p-3 space-y-2.5 bg-[#F8FBFB]">
+                      {f.asesora.activo && (
+                        <div className="flex gap-1.5">
+                          <button
+                            onClick={() => setMoviendoId(moviendoId === f.asesora.id ? null : f.asesora.id)}
+                            className="flex-none rounded-lg border border-[#DDE7E8] bg-white text-[#0B5F6C] px-2.5 py-1.5 text-[11px] font-semibold"
+                          >
+                            Mover
+                          </button>
+                          <button
+                            onClick={async () => {
+                              const error = await quitarAsesora(f.asesora, setAviso);
+                              if (error === null) recargarTodo();
+                              else if (error !== "cancelado") setAviso(error);
+                            }}
+                            className="flex-none rounded-lg border border-[#DDE7E8] bg-white text-[#B23A3A] px-2.5 py-1.5 text-[11px] font-semibold"
+                          >
+                            Quitar
+                          </button>
+                        </div>
+                      )}
                       {f.resumen.tardes > 0 && (
-                        <p className="text-[11.5px] font-semibold" style={{ color: COLOR_FILTRO.tardias.fondo }}>
-                          ⏱ {formatoMin(f.resumen.minutosTardeTotal)} tarde en el mes ({f.resumen.tardes} día{f.resumen.tardes === 1 ? "" : "s"})
-                        </p>
+                        <button
+                          onClick={() => setTardiasFiltroId((id) => (id === f.asesora.id ? null : f.asesora.id))}
+                          className="text-[11.5px] font-semibold text-left"
+                          style={{ color: COLOR_FILTRO.tardias.fondo, textDecoration: tardiasFiltroId === f.asesora.id ? "underline" : "none" }}
+                        >
+                          ⏱ {formatoMin(f.resumen.minutosTardeTotal)} tarde en el mes ({f.resumen.tardes} día{f.resumen.tardes === 1 ? "" : "s"}) · toca
+                          para resaltar
+                        </button>
                       )}
                       <div className="flex flex-wrap items-start gap-3">
                         {/* Un solo calendario: de lectura normalmente, o editando permisos cuando se toca el lapiz de arriba */}
@@ -1205,6 +1220,7 @@ export default function PanelPrincipal({ recargar = 0, arriba, onMes }: { recarg
                                   key={`${diaSel.fecha}-${filaSel.asesora.id}`}
                                   fila={filaSel}
                                   dia={diaSel}
+                                  hoy={hoy}
                                   detallePermiso={detallePermiso(filaSel, diaSel)}
                                   onEditarPermiso={(tipo) => abrirEdicionPermisos(filaSel, tipo)}
                                   onCorregido={recargarTodo}
