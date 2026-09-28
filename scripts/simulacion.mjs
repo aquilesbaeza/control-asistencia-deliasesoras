@@ -48,8 +48,16 @@ async function limpiar() {
   if (!existsSync(RUTA_IDS)) { console.log("No hay simulacion sembrada (falta simulacion/ids.json)."); return; }
   const ids = JSON.parse(readFileSync(RUTA_IDS, "utf8"));
   if (ids.horariosSimulados?.length) {
-    for (const id of ids.horariosSimulados) await supabase.from("asesoras").update({ hora_entrada: null }).eq("id", id);
-    console.log(`  asesoras.hora_entrada: ${ids.horariosSimulados.length} revertidas a sin horario fijo`);
+    // Solo se revierte si el horario sigue siendo el que puso la simulacion (10am-7pm): si Nuria
+    // ya lo cambio a mano desde entonces, se respeta y no se toca.
+    const { data: revertidas } = await supabase
+      .from("asesoras")
+      .update({ hora_entrada: null, hora_salida: null })
+      .in("id", ids.horariosSimulados)
+      .eq("hora_entrada", "10:00:00")
+      .eq("hora_salida", "19:00:00")
+      .select("id");
+    console.log(`  asesoras.hora_entrada: ${revertidas?.length ?? 0} de ${ids.horariosSimulados.length} revertidas a sin horario fijo (las demas ya las habia cambiado Nuria a mano y se respetan)`);
     delete ids.horariosSimulados;
   }
   for (const [tabla, lista] of Object.entries(ids)) {
@@ -70,11 +78,24 @@ async function sembrar() {
     .from("asesoras").select("id,nombre,punto,hora_entrada").eq("activo", true).order("punto").order("nombre");
   if (error) throw error;
 
-  // Horario de entrada (08:00) para calcular tardias; solo a quien no tenga uno ya definido, para no pisar datos reales.
+  // El mes es ficticio: se limpia por fecha (no solo lo que trackea ids.json) para que datos de
+  // pruebas sueltas hechas antes en la app (fuera de la simulacion) no choquen al insertar.
+  const desdeMes = fechaDe(1);
+  const hastaMes = fechaDe(DIAS);
+  await supabase.from("marcas").delete().gte("fecha", desdeMes).lte("fecha", hastaMes);
+  await supabase.from("dias_especiales").delete().gte("fecha", desdeMes).lte("fecha", hastaMes);
+  await supabase.from("comentarios").delete().gte("fecha", desdeMes).lte("fecha", hastaMes);
+
+  // Horario por defecto (10am a 7pm) para calcular tardias; solo a quien no tenga uno ya definido, para no pisar datos reales.
+  const HORA_ENTRADA_DEFECTO = "10:00:00";
+  const HORA_SALIDA_DEFECTO = "19:00:00";
   const idsHorario = [];
   for (const a of asesoras) {
     if (a.hora_entrada) continue;
-    const { error: eHor } = await supabase.from("asesoras").update({ hora_entrada: "08:00:00" }).eq("id", a.id);
+    const { error: eHor } = await supabase
+      .from("asesoras")
+      .update({ hora_entrada: HORA_ENTRADA_DEFECTO, hora_salida: HORA_SALIDA_DEFECTO })
+      .eq("id", a.id);
     if (!eHor) idsHorario.push(a.id);
   }
 
@@ -106,7 +127,7 @@ async function sembrar() {
 
   asesoras.forEach((a, i) => {
     esperado[a.nombre] = {};
-    const libreDow = i % 7;
+    const libreDow = 2; // martes por defecto para todas (0=domingo ... 2=martes)
     const ingreso = nuevos[i] ?? 1;
     let primeraLibre = null;
 
@@ -124,8 +145,8 @@ async function sembrar() {
         esperado[a.nombre][dia] = 4; c.libres++;
         if (i === idxMarcaEnLibre && primeraLibre === null && dia < DIA_HOY) { // marco pese a estar libre
           primeraLibre = dia;
-          marcas.push({ asesora_id: a.id, fecha, hora: hhmm(485), tipo: "entrada", origen: "ocr" });
-          marcas.push({ asesora_id: a.id, fecha, hora: hhmm(1025), tipo: "salida", origen: "ocr" });
+          marcas.push({ asesora_id: a.id, fecha, hora: hhmm(605), tipo: "entrada", origen: "ocr" });
+          marcas.push({ asesora_id: a.id, fecha, hora: hhmm(1145), tipo: "salida", origen: "ocr" });
           c.marcasEnLibre++;
         }
         continue;
@@ -135,8 +156,8 @@ async function sembrar() {
 
       if (dia === FERIADO) {
         if (trabajanFeriado.has(i)) {
-          marcas.push({ asesora_id: a.id, fecha, hora: hhmm(480), tipo: "entrada", origen: "ocr" });
-          marcas.push({ asesora_id: a.id, fecha, hora: hhmm(1020), tipo: "salida", origen: "ocr" });
+          marcas.push({ asesora_id: a.id, fecha, hora: hhmm(600), tipo: "entrada", origen: "ocr" });
+          marcas.push({ asesora_id: a.id, fecha, hora: hhmm(1140), tipo: "salida", origen: "ocr" });
           esperado[a.nombre][dia] = 1; c.feriadoTrabajado++;
         } else esperado[a.nombre][dia] = null;
         continue;
@@ -152,14 +173,14 @@ async function sembrar() {
           // Entro tarde y sigue en jornada: se ve el aviso rojo de tardanza junto con "en jornada".
           marcas.push({ asesora_id: a.id, fecha, hora: hhmm(Math.max(300, AHORA_MIN - 60)), tipo: "entrada", origen: "ocr" });
         } else if (h === "tarde") {
-          // Entro 20 min tarde (con horario de 08:00) y ya completo su jornada.
-          marcas.push({ asesora_id: a.id, fecha, hora: hhmm(500), tipo: "entrada", origen: "ocr" });
-          marcas.push({ asesora_id: a.id, fecha, hora: hhmm(1040), tipo: "salida", origen: "ocr" });
+          // Entro 20 min tarde (con horario de 10:00) y ya completo su jornada.
+          marcas.push({ asesora_id: a.id, fecha, hora: hhmm(620), tipo: "entrada", origen: "ocr" });
+          marcas.push({ asesora_id: a.id, fecha, hora: hhmm(1160), tipo: "salida", origen: "ocr" });
         } else {
-          marcas.push({ asesora_id: a.id, fecha, hora: hhmm(480), tipo: "entrada", origen: "ocr" });
-          if (h === "completa") marcas.push({ asesora_id: a.id, fecha, hora: hhmm(1020), tipo: "salida", origen: "ocr" });
-          else if (h === "extra") marcas.push({ asesora_id: a.id, fecha, hora: hhmm(1080), tipo: "salida", origen: "ocr" });
-          else marcasCorregidas.push({ asesora_id: a.id, fecha, hora: hhmm(1020), tipo: "salida", origen: "manual", hora_original: hhmm(930), motivo_correccion: "Permiso para una cita (simulacion)" });
+          marcas.push({ asesora_id: a.id, fecha, hora: hhmm(600), tipo: "entrada", origen: "ocr" });
+          if (h === "completa") marcas.push({ asesora_id: a.id, fecha, hora: hhmm(1140), tipo: "salida", origen: "ocr" });
+          else if (h === "extra") marcas.push({ asesora_id: a.id, fecha, hora: hhmm(1200), tipo: "salida", origen: "ocr" });
+          else marcasCorregidas.push({ asesora_id: a.id, fecha, hora: hhmm(1140), tipo: "salida", origen: "manual", hora_original: hhmm(1050), motivo_correccion: "Permiso para una cita (simulacion)" });
         }
         esperado[a.nombre][dia] = 1;
         continue;
@@ -168,9 +189,10 @@ async function sembrar() {
       let escenario = forzados[i]?.[dia] ?? forzadosPorDia[dia]?.[i];
       if (!escenario) {
         const r = azar();
-        escenario = r < 0.03 ? "ausencia" : r < 0.05 ? "sinEntrada" : r < 0.08 ? "sinSalida" : r < 0.13 ? "corta" : r < 0.21 ? "tarde" : "normal";
+        escenario = r < 0.03 ? "ausencia" : r < 0.05 ? "sinEntrada" : r < 0.08 ? "sinSalida" : r < 0.13 ? "corta" : r < 0.28 ? "tarde" : "normal";
       }
-      const entradaMin = escenario === "tarde" ? 495 + Math.floor(azar() * 40) : 472 + Math.floor(azar() * 14);
+      // Horario base 10:00 a. m. (600 min); "tarde" entra entre 15 y 55 min despues de las 10.
+      const entradaMin = escenario === "tarde" ? 615 + Math.floor(azar() * 40) : 592 + Math.floor(azar() * 14);
       let salidaMin = entradaMin + 540 + Math.floor(azar() * 12);
       if (escenario === "corta") salidaMin = entradaMin + 450;
       if (escenario === "extra") salidaMin = entradaMin + 540 + 60; // 1 h sobre la jornada
@@ -234,7 +256,7 @@ async function sembrar() {
   writeFileSync(RUTA_IDS, JSON.stringify(ids));
   writeFileSync("simulacion/esperado.json", JSON.stringify({ hoy: HOY, esperado }));
 
-  console.log(`Sembrado ${MES} (hoy = ${HOY}): ${asesoras.length} asesoras, ${marcas.length} marcas, ${especiales.length} permisos, ${comentarios.length} comentarios, ${idsHorario.length} horario(s) 08:00 asignado(s).`);
+  console.log(`Sembrado ${MES} (hoy = ${HOY}): ${asesoras.length} asesoras, ${marcas.length} marcas, ${especiales.length} permisos, ${comentarios.length} comentarios, ${idsHorario.length} horario(s) 10am-7pm asignado(s).`);
   console.log("Escenarios:", JSON.stringify(c));
 }
 
