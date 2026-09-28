@@ -17,7 +17,7 @@ import {
 } from "@/lib/asistencia";
 import { ahoraCR, aSetiembre, horaAmPm } from "@/lib/tiempo";
 import type { Asesora, Comentario, DiaEspecial, Feriado, Marca } from "@/lib/tipos";
-import { IconoCalendario, IconoComentario, IconoDocumento, IconoLapiz } from "@/components/Iconos";
+import { IconoComentario, IconoDocumento, IconoLapiz } from "@/components/Iconos";
 
 const ESTILO: Record<EstatusDia, { etiqueta: string; fondo: string; texto: string }> = {
   asistencia: { etiqueta: "Jornada completa", fondo: "#1EA6B8", texto: "#FFFFFF" },
@@ -225,7 +225,6 @@ function DetalleDia({
   dia,
   hoy,
   detallePermiso,
-  onEditarPermiso,
   onCorregido,
   onCerrar,
 }: {
@@ -233,14 +232,12 @@ function DetalleDia({
   dia: DiaCalculado;
   hoy: string;
   detallePermiso: string;
-  onEditarPermiso: (tipo: TipoPermiso) => void;
   onCorregido: () => void;
   onCerrar: () => void;
 }) {
   const estilo = estiloChip(dia);
-  // Libre, vacaciones e incapacidad son DIAS, no horas: se definen tocando el calendario, nunca con el reloj.
+  // Libre, vacaciones e incapacidad son DIAS, no horas: se marcan con los botones bajo el calendario, nunca con el reloj.
   const esPermiso = dia.estatus === "libre" || dia.estatus === "vacaciones" || dia.estatus === "incapacidad";
-  const [corrigiendoHoras, setCorrigiendoHoras] = useState(false);
   return (
     <div className="rounded-xl border-2 border-[#1EA6B8] bg-white p-3 space-y-2">
       <div className="flex items-start gap-2">
@@ -254,28 +251,14 @@ function DetalleDia({
           {estilo.etiqueta}
         </span>
         <span className="flex-1 min-w-0 text-[12px] leading-snug">{[detallePermiso, describirDia(dia, hoy)].filter(Boolean).join(" · ")}</span>
-        {esPermiso ? (
-          <button
-            onClick={() => onEditarPermiso(dia.estatus as TipoPermiso)}
-            className="flex-none text-[#6B6D6E]"
-            title="Corregir los días de este permiso, en el calendario"
-            aria-label="Corregir los días de este permiso, en el calendario"
-          >
-            <IconoLapiz size={15} />
-          </button>
-        ) : (
-          <button
-            onClick={() => setCorrigiendoHoras((v) => !v)}
-            className="flex-none text-[#6B6D6E]"
-            title="Corregir horas de entrada y salida"
-            aria-label="Corregir horas de entrada y salida"
-          >
-            <IconoLapiz size={15} />
-          </button>
-        )}
       </div>
 
-      {corrigiendoHoras && (
+      {/* Sin pasos intermedios: si el dia se puede corregir por horas, el formulario ya sale de una vez. */}
+      {esPermiso ? (
+        <p className="text-[11px] text-[#6B6D6E] leading-snug">
+          Para cambiarlo, elige Libre, Vacaciones o Incapacidad bajo el calendario y toca este día de nuevo.
+        </p>
+      ) : (
         <CorregirHoras
           asesoraId={fila.asesora.id}
           nombre={fila.asesora.nombre}
@@ -285,17 +268,9 @@ function DetalleDia({
           entradaOriginal={dia.entradaOriginal}
           salidaOriginal={dia.salidaOriginal}
           motivoPrevio={dia.motivoCorreccion}
-          onGuardado={() => {
-            setCorrigiendoHoras(false);
-            onCorregido();
-          }}
-          onCerrar={() => setCorrigiendoHoras(false)}
+          onGuardado={onCorregido}
+          onCerrar={onCerrar}
         />
-      )}
-      {!esPermiso && (
-        <button onClick={() => onEditarPermiso("libre")} className="w-full text-[11px] font-semibold text-[#0F7A8A] text-left">
-          ¿Es libre, vacaciones o incapacidad? Márcalo en el calendario
-        </button>
       )}
     </div>
   );
@@ -317,8 +292,8 @@ export default function PanelPrincipal({ recargar = 0, arriba, onMes }: { recarg
   const [abierta, setAbierta] = useState<string | null>(null);
   const abiertaRef = useRef<HTMLDivElement | null>(null);
   const [moviendoId, setMoviendoId] = useState<string | null>(null);
-  const [permisoAbiertoId, setPermisoAbiertoId] = useState<string | null>(null); // asesora cuyo calendario se esta editando (libre/vacaciones/incapacidad)
-  const [permisoTipo, setPermisoTipo] = useState<TipoPermiso>("libre");
+  const [permisoAbiertoId, setPermisoAbiertoId] = useState<string | null>(null); // asesora cuya tarjeta esta expandida (lista para editar libre/vacaciones/incapacidad)
+  const [permisoTipo, setPermisoTipo] = useState<TipoPermiso | null>(null); // null = ningun tipo armado: tocar un dia corrige horas en vez de marcar un permiso
   const [permisoInicial, setPermisoInicial] = useState<Record<string, TipoPermiso | null>>({});
   const [permisoSel, setPermisoSel] = useState<Record<string, TipoPermiso | null>>({});
   const [permisoComprobanteUrl, setPermisoComprobanteUrl] = useState<string | null>(null);
@@ -340,6 +315,7 @@ export default function PanelPrincipal({ recargar = 0, arriba, onMes }: { recarg
       if (el && el.getBoundingClientRect().bottom < 175) {
         setAbierta(null);
         setSeleccion(null);
+        setPermisoAbiertoId(null);
       }
     }
     window.addEventListener("scroll", alScrollear, { passive: true });
@@ -560,18 +536,23 @@ export default function PanelPrincipal({ recargar = 0, arriba, onMes }: { recarg
     }
   }
 
-  // Al abrir la tarjeta se ve su calendario con el dia elegido (hoy por defecto) ya seleccionado, listo para editar horas.
-  // Al abrir la tarjeta no se preselecciona ningun dia: el detalle del dia solo aparece si se toca uno en el calendario.
+  // Al expandir la tarjeta, el calendario y los botones Libre/Vacaciones/Incapacidad ya quedan
+  // listos de una vez (sin pasos intermedios): tocar un dia corrige horas, o toca uno de los 3
+  // botones primero si lo que se quiere es marcar un permiso.
   function alternarTarjeta(f: FilaAsesora, expandida: boolean) {
-    setAbierta(expandida ? null : f.asesora.id);
-    setSeleccion(null);
-    setPermisoAbiertoId(null);
-    setMoviendoId(null);
+    if (expandida) {
+      setAbierta(null);
+      setSeleccion(null);
+      setPermisoAbiertoId(null);
+      setMoviendoId(null);
+    } else {
+      prepararEdicion(f);
+    }
   }
 
-  // Libres, vacaciones e incapacidades se editan en el MISMO calendario (sin abrir uno aparte):
-  // este modo hace que tocar un dia lo marque/desmarque con el tipo elegido, en vez de abrir el detalle de horas.
-  function abrirEdicionPermisos(f: FilaAsesora, tipoInicial: TipoPermiso = "libre") {
+  // Prepara el estado de edicion de libre/vacaciones/incapacidad de esta asesora (sin armar ningun
+  // tipo todavia) para que los 3 botones ya salgan listos bajo su calendario en cuanto se expande.
+  function prepararEdicion(f: FilaAsesora, tipoInicial: TipoPermiso | null = null) {
     const inicial: Record<string, TipoPermiso | null> = {};
     for (const d of diasEspeciales) {
       if (d.asesora_id !== f.asesora.id) continue;
@@ -586,13 +567,16 @@ export default function PanelPrincipal({ recargar = 0, arriba, onMes }: { recarg
     setPermisoMensaje(null);
     setPermisoError(null);
     setPermisoAbiertoId(f.asesora.id);
-    setAbierta(f.asesora.id); // el calendario para tocar los dias vive en la tarjeta expandida
+    setAbierta(f.asesora.id);
     setSeleccion(null);
     setMoviendoId(null);
   }
 
+  // Desarma el tipo elegido y descarta los cambios sin guardar de libre/vacaciones/incapacidad,
+  // volviendo al detalle del dia normal (la tarjeta se queda expandida).
   function cerrarEdicionPermisos() {
-    setPermisoAbiertoId(null);
+    setPermisoSel(permisoInicial);
+    setPermisoTipo(null);
   }
 
   function alternarDiaPermiso(f: FilaAsesora, fecha: string) {
@@ -864,7 +848,10 @@ export default function PanelPrincipal({ recargar = 0, arriba, onMes }: { recarg
 
             {filasVisibles.map((f) => {
               const expandida = abierta === f.asesora.id;
-              const enEdicionPermisos = permisoAbiertoId === f.asesora.id;
+              // edicionLista: la tarjeta ya esta expandida y lista (calendario + botones Libre/Vacaciones/Incapacidad
+              // siempre visibles). enEdicionPermisos: ademas hay un tipo armado, asi que tocar un dia lo marca/desmarca.
+              const edicionLista = permisoAbiertoId === f.asesora.id;
+              const enEdicionPermisos = edicionLista && permisoTipo !== null;
               // El acumulado de tardias de cada tarjeta se puede tocar para resaltar solo esos dias en SU calendario, sin depender del indicador de arriba.
               const filtroEfectivo: FiltroDia | null = tardiasFiltroId === f.asesora.id ? "tardias" : kpiActivo;
               const dDia = mes === hoy.slice(0, 7) ? f.dias[idxDia] : undefined;
@@ -928,9 +915,9 @@ export default function PanelPrincipal({ recargar = 0, arriba, onMes }: { recarg
                         onClick={() => alternarTarjeta(f, expandida)}
                         className="flex-none w-8 h-8 rounded-lg grid place-items-center"
                         style={{ background: expandida ? ACENTO : "#E4F7F9", color: expandida ? "#FFFFFF" : "#0B5F6C" }}
-                        aria-label={expandida ? "Ocultar el calendario" : "Mostrar el calendario"}
+                        aria-label={expandida ? "Ocultar el calendario" : "Editar el calendario"}
                       >
-                        <IconoCalendario size={16} />
+                        <IconoLapiz size={16} />
                       </button>
                     </div>
 
@@ -1078,7 +1065,7 @@ export default function PanelPrincipal({ recargar = 0, arriba, onMes }: { recarg
                               </div>
                             ))}
                           </div>
-                          {enEdicionPermisos && (
+                          {edicionLista && (
                             <div className="grid grid-cols-3 gap-1 p-1.5 border-t border-[#E5E5EA]">
                               {(
                                 [
@@ -1092,7 +1079,7 @@ export default function PanelPrincipal({ recargar = 0, arriba, onMes }: { recarg
                                 return (
                                   <button
                                     key={t}
-                                    onClick={() => setPermisoTipo(t)}
+                                    onClick={() => setPermisoTipo(activo ? null : t)}
                                     className="rounded-md py-1 text-[9.5px] font-bold leading-tight"
                                     style={{
                                       background: activo ? col.fondo : "#F2F8F9",
@@ -1207,7 +1194,6 @@ export default function PanelPrincipal({ recargar = 0, arriba, onMes }: { recarg
                                   dia={diaSel}
                                   hoy={hoy}
                                   detallePermiso={detallePermiso(filaSel, diaSel)}
-                                  onEditarPermiso={(tipo) => abrirEdicionPermisos(filaSel, tipo)}
                                   onCorregido={recargarTodo}
                                   onCerrar={() => setSeleccion(null)}
                                 />
