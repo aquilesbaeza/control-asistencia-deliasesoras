@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { emparejarNombre, leerFotoMarca } from "@/lib/ocrMarca";
-import { ahoraCR } from "@/lib/tiempo";
 
 export async function POST(req: NextRequest) {
   const body = await req.json();
@@ -23,15 +22,19 @@ export async function POST(req: NextRequest) {
 
     const candidatos = emparejarNombre(lectura.nombre_detectado, asesoras ?? []);
 
-    const ahora = ahoraCR();
-    const horaActual = `${String(Math.floor(ahora.minutos / 60)).padStart(2, "0")}:${String(ahora.minutos % 60).padStart(2, "0")}`;
+    // La fecha y la hora SOLO pueden venir de lo leido en la foto: nunca se rellenan con la
+    // hora del servidor al subirla, porque eso inventaria un dato falso si la foto no sirve.
+    // Si no se leyo NADA (ni nombre, ni fecha, ni hora), la foto no muestra gafete ni reloj: se rebota.
+    const rechazada = !lectura.nombre_detectado && !lectura.fecha_detectada && !lectura.hora_detectada;
+
     return NextResponse.json({
       lectura,
       candidatos,
-      sugerencia_fecha: lectura.fecha_detectada ?? ahora.fecha,
-      sugerencia_hora: lectura.hora_detectada ?? horaActual,
+      sugerencia_fecha: lectura.fecha_detectada,
+      sugerencia_hora: lectura.hora_detectada,
       fecha_leida: !!lectura.fecha_detectada,
       hora_leida: !!lectura.hora_detectada,
+      rechazada,
     });
   } catch (err) {
     return NextResponse.json(

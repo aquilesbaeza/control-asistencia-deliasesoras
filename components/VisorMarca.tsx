@@ -17,6 +17,7 @@ export type ItemCaptura = {
   confianza: string | null;
   horaLeida: boolean;
   fechaLeida: boolean;
+  rechazada: boolean; // no se leyo nombre, fecha NI hora: la foto no muestra gafete ni reloj
   confirmado: boolean; // Nuria ya reviso esta foto
 };
 
@@ -109,6 +110,12 @@ export default function VisorMarca({
       </div>
 
       <div className="bg-white text-[#14181A] rounded-t-2xl p-3 space-y-2.5 max-h-[52%] overflow-auto">
+        {item.rechazada && (
+          <div className="rounded-lg bg-[#FBEAEA] border border-[#E5A0A0] text-[#B23A3A] px-2.5 py-2 text-[12px] font-bold leading-snug">
+            ✕ No cumple los requisitos: la foto no muestra con claridad el gafete ni el reloj. Súbela de nuevo o
+            complétala a mano si estás segura de los datos.
+          </div>
+        )}
         {razones.length > 0 && (
           <div className="flex flex-wrap gap-1.5">
             {razones.map((r) => (

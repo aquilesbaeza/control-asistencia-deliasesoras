@@ -9,14 +9,19 @@ export type LecturaFoto = {
 };
 
 const PROMPT = `Esta es una foto que una asesora envia como comprobante de marca de asistencia.
-La foto normalmente muestra: (1) un gafete/carnet con su nombre completo impreso, y
-(2) la pantalla de un reloj biometrico de fondo que muestra la hora actual (HH:MM AM/PM)
-y la fecha (dia, mes, anio). A veces la pantalla del reloj tambien muestra un boton
-resaltado o texto "Entrada" o "Salida".
+La foto normalmente muestra: (1) un gafete/carnet con su nombre completo impreso, junto a
+(2) la pantalla de un reloj biometrico que muestra la hora actual (HH:MM AM/PM) y la fecha
+(dia, mes, anio), en el MISMO momento en que se tomo la foto. A veces la pantalla del reloj
+tambien muestra un boton resaltado o texto "Entrada" o "Salida".
+
+A veces un dedo tapa parte del nombre en el gafete (normalmente el nombre de pila). Si eso
+pasa, igual lee y devuelve los apellidos u otra parte del nombre que SI se alcance a leer,
+en vez de devolver null: con los apellidos alcanza para identificar a la asesora despues.
+Solo usa null en nombre_detectado si NO hay ningun gafete o texto de nombre legible en la foto.
 
 Lee la imagen y devuelve UNICAMENTE un JSON (sin texto adicional, sin markdown) con esta forma exacta:
 {
-  "nombre_detectado": string | null,   // nombre completo tal como aparece en el gafete
+  "nombre_detectado": string | null,   // el nombre (completo o parcial, ej. solo apellidos) tal como aparece en el gafete
   "fecha_detectada": string | null,    // SIEMPRE en formato numerico YYYY-MM-DD, ej: "2026-09-22" (convierte el mes en texto y el orden dia/mes/anio que veas en la pantalla a este formato exacto, nunca dejes el mes en palabras ni cambies el orden)
   "hora_detectada": string | null,     // SIEMPRE en formato 24 horas HH:MM, ej: "17:23" (convierte AM/PM: si dice PM suma 12 a la hora salvo que sea 12 PM; si es 12 AM usa 00)
   "tipo_sugerido": "entrada" | "salida" | null, // si el reloj no lo indica, usa null
@@ -26,8 +31,12 @@ Lee la imagen y devuelve UNICAMENTE un JSON (sin texto adicional, sin markdown) 
 Ejemplo: si la pantalla muestra "05:23 PM" y "Martes, Septiembre 22, 2026", debes
 devolver "hora_detectada": "17:23" y "fecha_detectada": "2026-09-22".
 
-Si algun dato no es legible, usa null en ese campo en vez de inventarlo. No devuelvas
-la fecha ni la hora en el formato de texto original de la pantalla, siempre convierte.`;
+MUY IMPORTANTE: la fecha y la hora SOLO pueden salir de lo que se lea literalmente en la
+pantalla del reloj de la foto. Nunca inventes ni supongas la fecha/hora actual, ni la
+completes con la fecha de hoy: si la pantalla del reloj no aparece o no se alcanza a leer
+con claridad, esos dos campos van en null. Lo mismo aplica al nombre: si la foto no muestra
+ningun gafete o reloj biometrico (por ejemplo, es una foto de otra cosa), devuelve los tres
+campos en null en vez de adivinar.`;
 
 export async function leerFotoMarca(imagenBase64: string, mediaType: string): Promise<LecturaFoto> {
   const apiKey = process.env.GEMINI_API_KEY;

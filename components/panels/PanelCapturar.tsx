@@ -18,6 +18,7 @@ function horaActualCR(): string {
 }
 
 function diaMes(iso: string): string {
+  if (!iso) return "—";
   const [, m, d] = iso.split("-");
   return `${Number(d)}/${Number(m)}`;
 }
@@ -104,13 +105,19 @@ export default function PanelCapturar({ onGuardado }: { onGuardado?: () => void 
     for (const it of cola) {
       const r: string[] = [];
       if (it.estado === "error") r.push("No se pudo leer la foto: puedes completarla a mano");
-      if (it.estado !== "leyendo" && !it.asesora_id) r.push("Falta identificar a la asesora");
-      if (it.estado === "listo" && !it.confirmado) {
-        if (!it.horaLeida) r.push("Conviene revisar la hora (no se leyó con claridad)");
-        if (!it.fechaLeida) r.push("Conviene revisar la fecha");
-        if (it.confianza && it.confianza !== "alta") r.push("Lectura poco segura");
-        if (it.hora < "05:00" || it.hora > "23:00") r.push("Hora poco habitual");
-        if (fechaFrecuente && it.fecha !== fechaFrecuente) r.push("Fecha distinta a la del resto del lote");
+      if (it.estado === "listo" && it.rechazada) {
+        r.push("No cumple los requisitos: no se ve el gafete ni el reloj");
+      } else {
+        if (it.estado !== "leyendo" && !it.asesora_id) r.push("Falta identificar a la asesora");
+        if (it.estado === "listo" && !it.confirmado) {
+          if (!it.fecha) r.push("Falta la fecha: no se leyó en la foto, complétala a mano");
+          else if (!it.fechaLeida) r.push("Conviene revisar la fecha");
+          if (!it.hora) r.push("Falta la hora: no se leyó en la foto, complétala a mano");
+          else if (!it.horaLeida) r.push("Conviene revisar la hora (no se leyó con claridad)");
+          if (it.confianza && it.confianza !== "alta") r.push("Lectura poco segura");
+          if (it.hora && (it.hora < "05:00" || it.hora > "23:00")) r.push("Hora poco habitual");
+          if (fechaFrecuente && it.fecha && it.fecha !== fechaFrecuente) r.push("Fecha distinta a la del resto del lote");
+        }
       }
       mapa.set(it.id, r);
     }
@@ -118,8 +125,11 @@ export default function PanelCapturar({ onGuardado }: { onGuardado?: () => void 
   }, [cola, fechaFrecuente]);
 
   const porRevisar = cola.filter((it) => (razones.get(it.id)?.length ?? 0) > 0 && !duplicadas.has(it.id));
+  const rechazadas = cola.filter((it) => it.rechazada && !duplicadas.has(it.id));
   const visibles = soloRevisar ? porRevisar : cola;
-  const aGuardar = cola.filter((it) => it.estado === "listo" && it.asesora_id && !duplicadas.has(it.id));
+  // Nunca se guarda una foto sin fecha/hora propias: si la foto no las mostraba con claridad,
+  // Nuria debe completarlas a mano (revisarla) antes de que cuente como lista.
+  const aGuardar = cola.filter((it) => it.estado === "listo" && it.asesora_id && it.fecha && it.hora && !duplicadas.has(it.id));
 
   async function procesarArchivos(files: FileList | File[]) {
     setMensaje(null);
@@ -153,6 +163,7 @@ export default function PanelCapturar({ onGuardado }: { onGuardado?: () => void 
           confianza: null,
           horaLeida: false,
           fechaLeida: false,
+          rechazada: false,
           confirmado: false,
         },
       });
@@ -186,12 +197,15 @@ export default function PanelCapturar({ onGuardado }: { onGuardado?: () => void 
                   estado: "listo",
                   candidatos,
                   asesora_id: mejor && mejor.score >= UMBRAL_AUTOSELECCION ? mejor.id : "",
-                  fecha: data.sugerencia_fecha ?? it.fecha,
-                  hora: data.sugerencia_hora ?? it.hora,
+                  // Sin fallback a "ahora": si la foto no mostraba fecha/hora legibles, quedan
+                  // vacias para que Nuria las complete a mano en vez de guardar un dato inventado.
+                  fecha: data.sugerencia_fecha ?? "",
+                  hora: data.sugerencia_hora ?? "",
                   tipo: data.lectura?.tipo_sugerido ?? "entrada",
                   confianza: data.lectura?.confianza ?? null,
                   horaLeida: !!data.hora_leida,
                   fechaLeida: !!data.fecha_leida,
+                  rechazada: !!data.rechazada,
                 }
               : it
           )
@@ -328,9 +342,10 @@ export default function PanelCapturar({ onGuardado }: { onGuardado?: () => void 
             <div className="text-[12.5px] text-[#0B5F6C] font-semibold">
               {cola.length} foto(s) cargada(s)
               {procesando ? " · leyendo…" : ""}
-              {porRevisar.length > 0
-                ? ` · ${porRevisar.length} conviene(n) revisar, Nuria`
-                : cola.length > 0 && !procesando
+              {rechazadas.length > 0 ? ` · ${rechazadas.length} rebotada(s): no cumplen los requisitos` : ""}
+              {porRevisar.length - rechazadas.length > 0
+                ? ` · ${porRevisar.length - rechazadas.length} conviene(n) revisar, Nuria`
+                : cola.length > 0 && !procesando && rechazadas.length === 0
                 ? " · todo se ve en orden"
                 : ""}
             </div>
@@ -376,7 +391,11 @@ export default function PanelCapturar({ onGuardado }: { onGuardado?: () => void 
               <div
                 key={item.id}
                 className={`flex items-center gap-2.5 rounded-xl border bg-white p-2.5 ${
-                  rz.length > 0 && !repetida ? "border-[#35DCEC] border-2" : "border-[#DDE7E8]"
+                  item.rechazada && !repetida
+                    ? "border-[#E5484D] border-2"
+                    : rz.length > 0 && !repetida
+                    ? "border-[#35DCEC] border-2"
+                    : "border-[#DDE7E8]"
                 } ${repetida ? "opacity-60" : ""}`}
               >
                 <button
@@ -406,7 +425,7 @@ export default function PanelCapturar({ onGuardado }: { onGuardado?: () => void 
                     </div>
                   )}
                   {rz.length > 0 && !repetida && (
-                    <div className="text-[11px] text-[#0B5F6C] font-semibold truncate">{rz[0]}</div>
+                    <div className={`text-[11px] font-semibold truncate ${item.rechazada ? "text-[#B23A3A]" : "text-[#0B5F6C]"}`}>{rz[0]}</div>
                   )}
                 </button>
 
@@ -417,12 +436,14 @@ export default function PanelCapturar({ onGuardado }: { onGuardado?: () => void 
                         ? "bg-[#DDE7E8] text-[#3A3B3C]"
                         : item.estado === "leyendo"
                         ? "bg-[#CFF0F3] text-[#0B5F6C]"
+                        : item.rechazada
+                        ? "bg-[#E5484D] text-white"
                         : rz.length > 0
                         ? "bg-[#35DCEC] text-[#0B3A41]"
                         : "bg-[#E7F5EE] text-[#1E8A5F]"
                     }`}
                   >
-                    {repetida ? "Repetida" : item.estado === "leyendo" ? "…" : rz.length > 0 ? "Revisar" : "Listo"}
+                    {repetida ? "Repetida" : item.estado === "leyendo" ? "…" : item.rechazada ? "Rebotada" : rz.length > 0 ? "Revisar" : "Listo"}
                   </span>
                   <button onClick={() => quitar(item.id)} className="text-[#6B6D6E] text-[11px]" aria-label="Quitar">
                     Quitar
