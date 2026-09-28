@@ -769,9 +769,11 @@ export default function PanelPrincipal({ recargar = 0, arriba, onMes }: { recarg
                     }}
                     className="rounded-lg py-2 px-0.5 text-center"
                     style={{
-                      background: activo ? col.fondo : `${col.fondo}33`,
-                      color: activo ? col.texto : "#3A3B3C",
+                      // Seleccionado: sin relleno, solo el cuadro y el texto en su color (se nota igual de bien con tonos fuertes como negro o morado).
+                      background: activo ? "#FFFFFF" : `${col.fondo}33`,
+                      color: activo ? col.fondo : "#3A3B3C",
                       border: `1.5px solid ${col.fondo}`,
+                      boxShadow: activo ? `inset 0 0 0 1px ${col.fondo}` : "none",
                     }}
                   >
                     <div className="font-extrabold text-[15px] leading-none">{personas}</div>
@@ -867,6 +869,9 @@ export default function PanelPrincipal({ recargar = 0, arriba, onMes }: { recarg
               const filtroEfectivo: FiltroDia | null = tardiasFiltroId === f.asesora.id ? "tardias" : kpiActivo;
               const dDia = mes === hoy.slice(0, 7) ? f.dias[idxDia] : undefined;
               const info = dDia ? textoDia(f, dDia) : null;
+              // El aviso de hoy siempre lleva el color de su categoria (el mismo que su KPI arriba).
+              const catHoy = dDia ? categoriaDia(dDia, hoy) : null;
+              const colHoy = dDia?.minutosTarde !== null && dDia ? COLOR_FILTRO.tardias : catHoy ? COLOR_FILTRO[catHoy] : null;
               const diasFiltro = kpiActivo ? coincidencias.get(f.asesora.id)?.[kpiActivo]?.length ?? 0 : 0;
               // Con un filtro activo, la tarjeta cerrada se ve comprimida (una linea) para recorrer muchos nombres sin tanto scroll.
               if (kpiActivo && !expandida) {
@@ -940,13 +945,8 @@ export default function PanelPrincipal({ recargar = 0, arriba, onMes }: { recarg
                         </span>
                         {info && info.texto && (
                           <span
-                            className={`text-[10.5px] font-bold px-2 py-0.5 rounded-full ${
-                              info.tono === "ok"
-                                ? "bg-[#E7F5EE] text-[#1E8A5F]"
-                                : info.tono === "warn"
-                                ? "bg-[#35DCEC] text-[#0B3A41]"
-                                : "bg-[#E4F7F9] text-[#0B5F6C]"
-                            }`}
+                            className={`text-[10.5px] font-bold px-2 py-0.5 rounded-full ${!colHoy ? "bg-[#E4F7F9] text-[#0B5F6C]" : ""}`}
+                            style={colHoy ? { background: `${colHoy.fondo}22`, color: colHoy.fondo } : undefined}
                           >
                             {info.texto}
                           </span>
