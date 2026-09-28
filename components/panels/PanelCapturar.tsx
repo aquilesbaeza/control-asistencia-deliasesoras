@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import PopupAnomalia from "@/components/PopupAnomalia";
 import VisorMarca, { type ItemCaptura } from "@/components/VisorMarca";
 import { claveMarca } from "@/lib/asistencia";
-import { ahoraCR, horaAmPm } from "@/lib/tiempo";
+import { ahoraCR, horaAmPm, tipoDesdeHora } from "@/lib/tiempo";
 import { IconoCamara } from "@/components/Iconos";
 
 type Asesora = { id: string; nombre: string; punto: string };
@@ -201,7 +201,7 @@ export default function PanelCapturar({ onGuardado }: { onGuardado?: () => void 
                   // vacias para que Nuria las complete a mano en vez de guardar un dato inventado.
                   fecha: data.sugerencia_fecha ?? "",
                   hora: data.sugerencia_hora ?? "",
-                  tipo: data.lectura?.tipo_sugerido ?? "entrada",
+                  tipo: data.lectura?.tipo_sugerido ?? tipoDesdeHora(data.sugerencia_hora) ?? "entrada",
                   confianza: data.lectura?.confianza ?? null,
                   horaLeida: !!data.hora_leida,
                   fechaLeida: !!data.fecha_leida,

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { emparejarNombre, leerFotoMarca } from "@/lib/ocrMarca";
+import { tipoDesdeHora } from "@/lib/tiempo";
 
 export async function POST(req: NextRequest) {
   const body = await req.json();
@@ -27,8 +28,12 @@ export async function POST(req: NextRequest) {
     // Si no se leyo NADA (ni nombre, ni fecha, ni hora), la foto no muestra gafete ni reloj: se rebota.
     const rechazada = !lectura.nombre_detectado && !lectura.fecha_detectada && !lectura.hora_detectada;
 
+    // Regla de Nuria: a. m. es entrada, p. m. es salida, siempre. Si se leyo la hora, manda esa
+    // regla sobre lo que haya dicho el modelo (por si la pantalla mostraba un boton distinto).
+    const tipoSugerido = tipoDesdeHora(lectura.hora_detectada) ?? lectura.tipo_sugerido;
+
     return NextResponse.json({
-      lectura,
+      lectura: { ...lectura, tipo_sugerido: tipoSugerido },
       candidatos,
       sugerencia_fecha: lectura.fecha_detectada,
       sugerencia_hora: lectura.hora_detectada,

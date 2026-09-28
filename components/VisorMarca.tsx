@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import SelectorHora from "@/components/SelectorHora";
+import { tipoDesdeHora } from "@/lib/tiempo";
 
 export type ItemCaptura = {
   id: number;
@@ -139,7 +140,10 @@ export default function VisorMarca({
         <div>
           <div className="text-[10.5px] font-bold text-[#6B6D6E] uppercase tracking-wide mb-1">Hora</div>
           <div className="flex justify-center">
-            <SelectorHora valor={item.hora} onCambio={(hora) => onCambio({ hora, confirmado: true })} />
+            <SelectorHora
+              valor={item.hora}
+              onCambio={(hora) => onCambio({ hora, tipo: tipoDesdeHora(hora) ?? item.tipo, confirmado: true })}
+            />
           </div>
         </div>
 

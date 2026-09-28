@@ -24,7 +24,7 @@ Lee la imagen y devuelve UNICAMENTE un JSON (sin texto adicional, sin markdown) 
   "nombre_detectado": string | null,   // el nombre (completo o parcial, ej. solo apellidos) tal como aparece en el gafete
   "fecha_detectada": string | null,    // SIEMPRE en formato numerico YYYY-MM-DD, ej: "2026-09-22" (convierte el mes en texto y el orden dia/mes/anio que veas en la pantalla a este formato exacto, nunca dejes el mes en palabras ni cambies el orden)
   "hora_detectada": string | null,     // SIEMPRE en formato 24 horas HH:MM, ej: "17:23" (convierte AM/PM: si dice PM suma 12 a la hora salvo que sea 12 PM; si es 12 AM usa 00)
-  "tipo_sugerido": "entrada" | "salida" | null, // si el reloj no lo indica, usa null
+  "tipo_sugerido": "entrada" | "salida" | null, // regla fija: si la hora es a.m. pon "entrada"; si es p.m. pon "salida"; usa null solo si no hay hora_detectada
   "confianza": "alta" | "media" | "baja"
 }
 

@@ -40,3 +40,11 @@ export function horaAmPm(hora: string | null | undefined): string {
   const h12 = h % 12 === 0 ? 12 : h % 12;
   return `${h12}:${String(m).padStart(2, "0")} ${periodo}`;
 }
+
+/** Regla de Nuria: en las marcas, a. m. es entrada y p. m. es salida. */
+export function tipoDesdeHora(hora: string | null | undefined): "entrada" | "salida" | null {
+  if (!hora) return null;
+  const h = Number(hora.slice(0, 2));
+  if (Number.isNaN(h)) return null;
+  return h < 12 ? "entrada" : "salida";
+}
